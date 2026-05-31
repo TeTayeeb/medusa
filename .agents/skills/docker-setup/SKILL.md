@@ -113,6 +113,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - medusa_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -128,11 +133,18 @@ services:
     container_name: medusa_backend
     restart: unless-stopped
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     ports:
       - "9000:9000"
       - "5173:5173"
+    # DATABASE_URL and REDIS_URL are set here as the source of truth for Docker.
+    # Docker Compose gives `environment:` precedence over `env_file:`, so these
+    # values always win. The .env file supplies all other variables (JWT_SECRET,
+    # CORS, etc.). Do NOT put DATABASE_URL / REDIS_URL in apps/backend/.env when
+    # running in Docker — they would be silently overridden anyway and cause confusion.
     environment:
       - NODE_ENV=development
       - DATABASE_URL=postgres://postgres:postgres@postgres:5432/medusa-store
@@ -154,8 +166,9 @@ services:
       - medusa
     ports:
       - "8000:8000"
+    # See "Storefront env vars: server-side vs browser" section below before editing this.
     environment:
-      - NEXT_PUBLIC_MEDUSA_BACKEND_URL=http://medusa:9000
+      - NEXT_PUBLIC_MEDUSA_BACKEND_URL=http://localhost:9000
     env_file:
       - apps/storefront/.env
     volumes:
@@ -175,6 +188,9 @@ networks:
   medusa_network:
     driver: bridge
 ```
+
+> ⚠️ **`environment:` takes precedence over `env_file:` in Docker Compose.**
+> `DATABASE_URL` and `REDIS_URL` are defined in the `environment:` block — this is the **source of truth** for Docker. The `env_file` supplies other variables (JWT_SECRET, CORS settings, etc.). Do **not** also set `DATABASE_URL`/`REDIS_URL` in `apps/backend/.env` for Docker use; if you do, the `env_file` values are silently ignored for those keys.
 
 > ⚠️ **Anonymous volumes for `node_modules` are required.**
 > pnpm workspaces create symlinked `node_modules`. Without these anonymous volumes, the bind mount (`. :/server`) overwrites them with empty host directories, breaking all dependencies at runtime.
@@ -310,10 +326,8 @@ Add convenience scripts to the root `package.json`:
    cp apps/storefront/.env.template apps/storefront/.env
    ```
 
-2. **Edit `apps/backend/.env`** — ensure these are set correctly:
+2. **Edit `apps/backend/.env`** — set only non-Docker variables here. `DATABASE_URL` and `REDIS_URL` are already provided by `docker-compose.yml`'s `environment:` block and will override anything in this file:
    ```env
-   DATABASE_URL=postgres://postgres:postgres@postgres:5432/medusa-store
-   REDIS_URL=redis://redis:6379
    JWT_SECRET=your-secret-here
    COOKIE_SECRET=your-secret-here
    STORE_CORS=http://localhost:8000
@@ -321,18 +335,41 @@ Add convenience scripts to the root `package.json`:
    AUTH_CORS=http://localhost:9000
    ```
 
-   > ⚠️ The `DATABASE_URL` host must be `postgres` (the Docker service name), NOT `localhost`.
-   > The `REDIS_URL` host must be `redis`, NOT `localhost`.
+   > ⚠️ Do **not** add `DATABASE_URL` or `REDIS_URL` to this `.env` for Docker use. The `docker-compose.yml` `environment:` block sets them to the correct Docker service hostnames and takes precedence. Adding them here creates confusion about which value is active.
 
-3. **Edit `apps/storefront/.env`**:
+3. **Edit `apps/storefront/.env`** — see "Storefront env vars: server-side vs browser" below for which value to use:
    ```env
-   NEXT_PUBLIC_MEDUSA_BACKEND_URL=http://medusa:9000
    NEXT_PUBLIC_BASE_URL=http://localhost:8000
    ```
 
 ---
 
-## Starting and Stopping
+## Storefront Env Vars: Server-Side vs Browser
+
+`NEXT_PUBLIC_` variables in Next.js are **embedded at build time** and sent to the browser. The browser runs on the user's machine — it cannot resolve Docker service names like `medusa`.
+
+| Context | Can resolve `medusa`? | Correct URL |
+|---|---|---|
+| Inside storefront container (SSR/fetch) | ✅ Yes | `http://medusa:9000` |
+| User's browser (client-side JS) | ❌ No | `http://localhost:9000` |
+
+**The Medusa Next.js Starter uses `NEXT_PUBLIC_MEDUSA_BACKEND_URL` for client-side SDK calls** (from the browser). Therefore:
+
+```env
+# apps/storefront/.env — for browser (client-side) requests
+NEXT_PUBLIC_MEDUSA_BACKEND_URL=http://localhost:9000
+```
+
+And in `docker-compose.yml`, use the same `localhost` value (not the Docker service name):
+
+```yaml
+environment:
+  - NEXT_PUBLIC_MEDUSA_BACKEND_URL=http://localhost:9000
+```
+
+> ⚠️ If your storefront also makes **server-side** requests (SSR, `getServerSideProps`, Route Handlers) that need to call the backend, those must use `http://medusa:9000`. Use a separate non-`NEXT_PUBLIC_` variable for SSR requests, e.g. `MEDUSA_BACKEND_URL=http://medusa:9000`, and reference it only in server-side code.
+
+---
 
 ```bash
 # Start all services (builds image if needed)
@@ -387,8 +424,30 @@ Then log in at: **http://localhost:9000/app**
 **Fix:** Set `NEXT_PUBLIC_MEDUSA_BACKEND_URL=http://medusa:9000` (use Docker service name, not `localhost`).
 
 ### Database migrations fail on first start
-**Cause:** postgres container not ready yet.
-**Fix:** Add health check or retry logic, or run `docker compose restart medusa` after postgres is healthy.
+**Cause:** postgres container not ready to accept connections yet when medusa starts.
+**Fix:** Add a `healthcheck` to the postgres service and use `condition: service_healthy` in medusa's `depends_on`:
+
+```yaml
+services:
+  postgres:
+    image: postgres:15-alpine
+    # ... other config ...
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  medusa:
+    # ... other config ...
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+```
+
+This is already included in the `docker-compose.yml` template above.
 
 ### Port already in use
 **Fix:** Stop local postgres/redis first, or change port mappings in `docker-compose.yml`.
