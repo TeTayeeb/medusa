@@ -1,0 +1,52 @@
+---
+title: Capture Payment Workflow — Sequence Diagram
+---
+sequenceDiagram
+    actor Merchant
+    participant AdminAPI as Admin API Route<br/>/admin/payments/:id/capture
+    participant WF as capturePaymentWorkflow
+    participant CapStep as capturePaymentStep
+    participant PaySvc as PaymentModuleService
+    participant ProvSvc as PaymentProviderService
+    participant Provider as IPaymentProvider<br/>(e.g. Stripe)
+    participant EventBus as Event Bus
+    participant DB as PostgreSQL
+
+    Merchant->>AdminAPI: POST /admin/payments/:id/capture { amount? }
+    AdminAPI->>WF: workflow.run({ payment_id, amount })
+
+    WF->>CapStep: capturePayment({ payment_id, amount })
+    CapStep->>PaySvc: capturePayment({ payment_id, amount }, context)
+
+    PaySvc->>DB: BEGIN
+    PaySvc->>DB: SELECT Payment WHERE id = payment_id
+    PaySvc->>DB: SELECT SUM(captures.amount) remaining
+
+    alt amount > remaining capturable
+        PaySvc->>DB: ROLLBACK
+        PaySvc-->>CapStep: MedusaError INVALID_DATA
+        CapStep-->>WF: throw
+        WF-->>AdminAPI: 400 Bad Request
+        AdminAPI-->>Merchant: Error response
+    else amount is valid
+        PaySvc->>ProvSvc: capturePayment(payment, amount)
+        ProvSvc->>Provider: capturePayment({ data, amount })
+        Provider-->>ProvSvc: { data: providerResult }
+
+        ProvSvc-->>PaySvc: capture result
+
+        PaySvc->>DB: INSERT Capture { payment_id, amount }
+        PaySvc->>DB: UPDATE Payment.captured_at (if fully captured)
+        PaySvc->>DB: UPDATE PaymentCollection.captured_amount = SUM(captures)
+        PaySvc->>DB: UPDATE PaymentCollection.status (recalculate)
+        PaySvc->>DB: COMMIT
+
+        PaySvc->>EventBus: emit payment.captured (after commit)
+        PaySvc-->>CapStep: PaymentDTO
+
+        CapStep-->>WF: PaymentDTO
+        WF-->>AdminAPI: { payment: PaymentDTO }
+        AdminAPI-->>Merchant: 200 OK
+
+        Note over PaySvc,DB: Compensation (if provider call succeeds<br/>but DB write fails):<br/>provider.refundPayment(captureData)
+    end

@@ -1,0 +1,106 @@
+graph TB
+    subgraph "Callers"
+        APIRoute["API Route Handler"]
+        Job["Background Job"]
+        Subscriber["Event Subscriber"]
+        CustomWorkflow["Custom Workflow\n(runAsStep)"]
+    end
+
+    subgraph "@medusajs/core-flows"
+        subgraph "Cart Workflows"
+            CreateCart["createCartsWorkflow"]
+            AddToCart["addToCartWorkflow"]
+            CompleteCart["completeCartWorkflow"]
+            UpdateCart["updateCartWorkflow"]
+            AddShipping["addShippingMethodToCartWorkflow"]
+        end
+
+        subgraph "Order Workflows"
+            CreateOrder["createOrderWorkflow"]
+            CancelOrder["cancelOrderWorkflow"]
+            CreateReturn["createReturnWorkflow"]
+            CreateExchange["createExchangeWorkflow"]
+        end
+
+        subgraph "Product Workflows"
+            CreateProducts["createProductsWorkflow"]
+            UpdateProducts["updateProductsWorkflow"]
+            ImportProducts["importProductsWorkflow"]
+            ExportProducts["exportProductsWorkflow"]
+        end
+
+        subgraph "Payment Workflows"
+            AuthPayment["authorizePaymentSessionWorkflow"]
+            CapturePayment["capturePaymentWorkflow"]
+            RefundPayment["refundPaymentWorkflow"]
+        end
+
+        subgraph "Shared Steps"
+            ConfirmInventory["confirmInventoryStep"]
+            ReserveInventory["reserveInventoryStep"]
+            UseQueryGraph["useQueryGraphStep"]
+        end
+
+        subgraph "Hooks (Extension Points)"
+            HookCartCompleted["cartCompleted"]
+            HookOrderCreated["orderCreated"]
+            HookProductsCreated["productsCreated"]
+        end
+    end
+
+    subgraph "Workflows SDK"
+        Orchestration["@medusajs/orchestration\n(Transaction Engine)"]
+    end
+
+    subgraph "DI Container (resolved at runtime)"
+        CartModule["Cart Module Service"]
+        OrderModule["Order Module Service"]
+        ProductModule["Product Module Service"]
+        PaymentModule["Payment Module Service"]
+        InventoryModule["Inventory Module Service"]
+        QueryEngine["Query Engine\n(cross-module reads)"]
+    end
+
+    %% Callers → Workflows
+    APIRoute -->|".run()"| CompleteCart
+    APIRoute -->|".run()"| CreateProducts
+    Job -->|".run()"| ImportProducts
+    Subscriber -->|".run()"| CreateOrder
+    CustomWorkflow -->|"runAsStep()"| CreateProducts
+
+    %% completeCartWorkflow internal flow
+    CompleteCart --> UseQueryGraph
+    CompleteCart --> ConfirmInventory
+    CompleteCart --> ReserveInventory
+    CompleteCart --> AuthPayment
+    CompleteCart --> CreateOrder
+    CompleteCart --> HookCartCompleted
+
+    %% createOrderWorkflow
+    CreateOrder --> HookOrderCreated
+
+    %% createProductsWorkflow
+    CreateProducts --> HookProductsCreated
+
+    %% Steps → Modules
+    ConfirmInventory --> InventoryModule
+    ReserveInventory --> InventoryModule
+    UseQueryGraph --> QueryEngine
+    CreateCart --> CartModule
+    AddToCart --> CartModule
+    CreateOrder --> OrderModule
+    CancelOrder --> OrderModule
+    CreateProducts --> ProductModule
+    AuthPayment --> PaymentModule
+    CapturePayment --> PaymentModule
+    RefundPayment --> PaymentModule
+
+    %% Orchestration engine
+    CompleteCart -.->|"transaction state"| Orchestration
+    CreateOrder -.->|"transaction state"| Orchestration
+
+    style CompleteCart fill:#f5a623,color:#000
+    style HookCartCompleted fill:#b8e994,color:#000
+    style HookOrderCreated fill:#b8e994,color:#000
+    style HookProductsCreated fill:#b8e994,color:#000
+    style Orchestration fill:#9b59b6,color:#fff

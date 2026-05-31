@@ -1,0 +1,88 @@
+classDiagram
+    direction TB
+
+    class TaxRegion {
+        +String id
+        +String country_code
+        +String province_code
+        +String parent_id
+        +String provider_id
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class TaxRate {
+        +String id
+        +String name
+        +Float rate
+        +String code
+        +Boolean is_default
+        +Boolean is_combinable
+        +String tax_region_id
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class TaxRateRule {
+        +String id
+        +String tax_rate_id
+        +String reference
+        +String reference_id
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class TaxProvider {
+        +String id
+        +Boolean is_enabled
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class ITaxProvider {
+        <<interface>>
+        +String identifier
+        +String[] channels
+        +getTaxLines(items, shipping, ctx) ProviderTaxLineDTO[]
+    }
+
+    class ITaxModuleService {
+        <<interface>>
+        +createTaxRegions(data, ctx) TaxRegionDTO[]
+        +updateTaxRegions(data, ctx) TaxRegionDTO[]
+        +deleteTaxRegions(ids, ctx) void
+        +createTaxRates(data, ctx) TaxRateDTO[]
+        +updateTaxRates(data, ctx) TaxRateDTO[]
+        +deleteTaxRates(ids, ctx) void
+        +createTaxRateRules(data, ctx) TaxRateRuleDTO[]
+        +deleteTaxRateRules(ids, ctx) void
+        +getTaxLines(items, shipping, ctx) ItemTaxLineDTO[]
+    }
+
+    class ItemTaxLineDTO {
+        <<interface>>
+        +String line_item_id
+        +String shipping_method_id
+        +Float rate
+        +String name
+        +String code
+        +String provider_id
+    }
+
+    TaxRegion "1" --> "0..*" TaxRate : has rates
+    TaxRate "1" --> "0..*" TaxRateRule : has rules
+    TaxRegion "0..*" --> "0..1" TaxRegion : parent
+    TaxRegion "0..*" --> "0..1" TaxProvider : delegates to
+    TaxProvider ..|> ITaxProvider : implements
+    ITaxModuleService ..> TaxRegion : manages
+    ITaxModuleService ..> TaxRate : manages
+    ITaxModuleService ..> TaxRateRule : manages
+    ITaxModuleService ..> ItemTaxLineDTO : produces
+
+    note for TaxRegion "Modules.TAX\nHierarchy: country (parent) → province (child).\nprovider_id delegates calculation externally."
+    note for TaxRateRule "reference: product | product_type | product_tag\nPriority: product > product_type > product_tag > default"
+    note for TaxRate "is_default = true means used when no rule matches.\nis_combinable = true allows stacking with parent region rates."

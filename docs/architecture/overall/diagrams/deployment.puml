@@ -1,0 +1,103 @@
+@startuml deployment
+!theme cerulean-outline
+skinparam defaultFontSize 12
+skinparam titleFontSize 16
+skinparam linetype ortho
+skinparam ArrowColor #555555
+skinparam nodeBackgroundColor #DBEAFE
+skinparam nodeBorderColor #2563EB
+skinparam databaseBackgroundColor #DCFCE7
+skinparam databaseBorderColor #16A34A
+skinparam artifactBackgroundColor #FAFAFA
+skinparam artifactBorderColor #D1D5DB
+skinparam componentBackgroundColor #FEF3C7
+skinparam componentBorderColor #D97706
+
+title Deployment Architecture — Medusa v2.15.4
+
+' ── Client tier ───────────────────────────────────────────────────────────────
+node "Client Tier" as ClientTier {
+    node "Admin Browser" as AdminBrowser
+    node "Customer Browser\n(Storefront)" as SFBrowser
+    node "API Consumer\n(Mobile / 3rd-party)" as APIConsumer
+}
+
+' ── Docker network ────────────────────────────────────────────────────────────
+node "Docker Network — medusa-network (bridge)" as DockerNet {
+
+    ' ── Nginx reverse proxy ───────────────────────────────────────────────────
+    node "nginx container\n(optional reverse proxy)" as NginxNode {
+        component "Nginx :80/:443\n(TLS termination)" as Nginx
+    }
+
+    ' ── medusa-backend ───────────────────────────────────────────────────────
+    node "medusa-backend container\n(node:20-alpine)" as MedusaNode {
+        component "Express HTTP Server\n:9000" as Express
+        component "Awilix DI Container" as DI
+        component "Commerce Modules\n(Product, Order, Cart, …)" as Modules
+        component "MikroORM 6\n(connection pool)" as ORM
+        component "ioredis client\n(events + cache)" as RedisClient
+        artifact  "./uploads  (bind mount)" as UploadsVol
+        artifact  "medusa-config.ts  (bind mount)" as ConfigVol
+    }
+
+    ' ── medusa-worker (optional) ─────────────────────────────────────────────
+    node "medusa-worker container\n(node:20-alpine — optional)" as WorkerNode {
+        component "BullMQ Worker\n(job consumer)" as BullWorker
+        component "Event Subscribers\n(async handlers)" as Subscribers
+        component "Scheduled Jobs\n(cron tasks)" as ScheduledJobs
+        component "ioredis client\n(BullMQ)" as WorkerRedis
+    }
+
+    ' ── postgres container ───────────────────────────────────────────────────
+    node "postgres container\n(postgres:15-alpine)" as PGNode {
+        database "PostgreSQL 15\n:5432" as PG
+        artifact "postgres-data\n(named volume — persisted)" as PGVol
+    }
+
+    ' ── redis container ──────────────────────────────────────────────────────
+    node "redis container\n(redis:7-alpine)" as RedisNode {
+        database "Redis 7\n:6379" as Redis
+        artifact "redis-data\n(named volume)" as RedisVol
+        component "AOF Persistence\n(appendonly yes)" as AOF
+    }
+}
+
+' ── External cloud services ───────────────────────────────────────────────────
+node "External Cloud Services" as ExtCloud {
+    component "S3 / Object Storage\n(AWS S3 · MinIO · R2)" as S3
+    component "Email Provider\n(SendGrid · Resend)" as Email
+    component "Payment Gateway\n(Stripe · PayPal)" as PayGW
+}
+
+' ── Relationships ─────────────────────────────────────────────────────────────
+AdminBrowser --> Nginx    : "HTTPS :443"
+SFBrowser    --> Nginx    : "HTTPS :443"
+APIConsumer  --> Nginx    : "HTTPS :443"
+
+Nginx        --> Express  : "HTTP proxy :9000"
+
+Express      --> DI
+DI           --> Modules
+DI           --> ORM
+DI           --> RedisClient
+
+ORM          --> PG       : "TCP 5432"
+RedisClient  --> Redis    : "TCP 6379"
+
+BullWorker   --> WorkerRedis
+Subscribers  --> WorkerRedis
+WorkerRedis  --> Redis    : "TCP 6379 (BullMQ)"
+
+PG           -- PGVol
+Redis        -- RedisVol
+Redis        -- AOF
+
+Modules      --> S3       : "HTTPS / AWS SDK"
+Modules      --> Email    : "HTTPS / API"
+Modules      --> PayGW    : "HTTPS / SDK"
+
+UploadsVol   .. MedusaNode : "bind mount"
+ConfigVol    .. MedusaNode : "bind mount"
+
+@enduml

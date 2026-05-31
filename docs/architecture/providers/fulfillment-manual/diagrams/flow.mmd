@@ -1,0 +1,60 @@
+sequenceDiagram
+    participant Admin as Store Operator
+    participant MedusaAdmin as Medusa Admin UI
+    participant MedusaAPI as Medusa API
+    participant FulfillMod as Fulfillment Module
+    participant ManualSvc as ManualFulfillmentService
+    participant DB as Database
+
+    Note over Admin,DB: Shipping option setup
+    Admin->>MedusaAdmin: Configure shipping method
+    MedusaAdmin->>MedusaAPI: GET /admin/fulfillment-providers/:id/options
+    MedusaAPI->>FulfillMod: getFulfillmentOptions("manual")
+    FulfillMod->>ManualSvc: getFulfillmentOptions()
+    ManualSvc-->>FulfillMod: [{ id: "manual-fulfillment" }, { id: "manual-fulfillment-return", is_return: true }]
+    FulfillMod-->>MedusaAPI: options
+    MedusaAPI-->>MedusaAdmin: shipping options
+    Admin->>MedusaAdmin: Select "manual-fulfillment", set price $5.00
+    MedusaAdmin->>MedusaAPI: POST /admin/shipping-options { provider_id: "manual", amount: 5.00 }
+    MedusaAPI->>FulfillMod: validateOption({ id: "manual-fulfillment" })
+    FulfillMod->>ManualSvc: validateOption(data)
+    ManualSvc-->>FulfillMod: true
+    FulfillMod-->>DB: save ShippingOption
+    DB-->>FulfillMod: saved
+    MedusaAPI-->>MedusaAdmin: shipping option created
+
+    Note over Admin,DB: Order placed + Fulfillment created
+    MedusaAPI->>FulfillMod: canCalculate("manual")
+    FulfillMod->>ManualSvc: canCalculate()
+    ManualSvc-->>FulfillMod: false
+    Note right of FulfillMod: Static price used (no dynamic calculation)
+    MedusaAPI->>FulfillMod: validateFulfillmentData(optionData, data, context)
+    FulfillMod->>ManualSvc: validateFulfillmentData(optionData, data, context)
+    ManualSvc-->>FulfillMod: data (pass-through)
+    Admin->>MedusaAdmin: Create fulfillment for order
+    MedusaAdmin->>MedusaAPI: POST /admin/orders/:id/fulfillments
+    MedusaAPI->>FulfillMod: createFulfillment(data, items, order, fulfillment)
+    FulfillMod->>ManualSvc: createFulfillment()
+    ManualSvc-->>FulfillMod: { data: {}, labels: [] }
+    FulfillMod->>DB: save Fulfillment { data: {}, labels: [] }
+    DB-->>FulfillMod: saved
+    FulfillMod-->>MedusaAPI: fulfillment
+    MedusaAPI-->>MedusaAdmin: { fulfillment }
+
+    Note over Admin,DB: Manual ship + Cancel
+    Admin->>MedusaAdmin: Mark as shipped (ships package externally)
+    MedusaAdmin->>MedusaAPI: POST /admin/fulfillments/:id/shipments
+    MedusaAPI->>DB: update Fulfillment.shipped_at
+    DB-->>MedusaAPI: updated
+    MedusaAPI-->>MedusaAdmin: fulfillment shipped
+
+    alt Cancel fulfillment
+        Admin->>MedusaAdmin: Cancel fulfillment
+        MedusaAdmin->>MedusaAPI: POST /admin/fulfillments/:id/cancel
+        MedusaAPI->>FulfillMod: cancelFulfillment(fulfillment)
+        FulfillMod->>ManualSvc: cancelFulfillment()
+        ManualSvc-->>FulfillMod: {} (no-op)
+        FulfillMod->>DB: update Fulfillment.canceled_at
+        DB-->>FulfillMod: updated
+        MedusaAPI-->>MedusaAdmin: cancelled
+    end

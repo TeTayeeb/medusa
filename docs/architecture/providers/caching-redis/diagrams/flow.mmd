@@ -1,0 +1,64 @@
+sequenceDiagram
+    participant App as Application / Module
+    participant CacheMod as Caching Module
+    participant RedisSvc as RedisCachingProvider
+    participant Redis as Redis
+
+    Note over App,Redis: Connection initialisation (startup)
+    CacheMod->>RedisSvc: loader: connection.js
+    RedisSvc->>Redis: new IORedis(redisUrl, { lazyConnect, connectTimeout, ... })
+    RedisSvc->>Redis: PING
+    alt Redis available
+        Redis-->>RedisSvc: PONG
+        RedisSvc->>CacheMod: register { redisClient, prefix, logger } in DI
+    else Redis unavailable
+        Redis-->>RedisSvc: connection error
+        RedisSvc->>RedisSvc: log warning (non-fatal)
+        RedisSvc->>CacheMod: register { redisClient, prefix, logger } in DI
+    end
+
+    Note over App,Redis: Cache SET with tags
+    App->>CacheMod: cache.set({ key: "product:1", data: {...}, ttl: 1800, tags: ["products"] })
+    CacheMod->>RedisSvc: set(...)
+    RedisSvc->>RedisSvc: JSON.stringify(data) → serialize
+    RedisSvc->>RedisSvc: compressData(serialized) → compressed buffer
+    RedisSvc->>RedisSvc: internTags(["products"]) → tagIds [42]
+    RedisSvc->>Redis: PIPELINE:\n  HSETNX mc:product:1 data <compressed>\n  EXPIRE mc:product:1 1800\n  SETNX mc:product:1:tags <tagIds-buffer>\n  EXPIRE mc:product:1:tags 1860\n  SADD mc:tag:<hash(products)> mc:product:1\n  EXPIRE mc:tag:<hash> 1860
+    Redis-->>RedisSvc: pipeline results
+    RedisSvc-->>CacheMod: void
+    CacheMod-->>App: void
+
+    Note over App,Redis: Cache GET (single key)
+    App->>CacheMod: cache.get({ key: "product:1" })
+    CacheMod->>RedisSvc: get({ key: "product:1" })
+    RedisSvc->>Redis: HGETBUFFER mc:product:1 data
+    alt cache hit
+        Redis-->>RedisSvc: compressed buffer
+        RedisSvc->>RedisSvc: decompressData(buffer) → JSON.parse → object
+        RedisSvc-->>CacheMod: { id: "prod_1", ... }
+        CacheMod-->>App: cached value
+    else cache miss
+        Redis-->>RedisSvc: null
+        RedisSvc-->>CacheMod: null
+        CacheMod-->>App: null (fall back to DB)
+    end
+
+    Note over App,Redis: Tag-based INVALIDATION
+    App->>CacheMod: cache.invalidate("products")
+    CacheMod->>RedisSvc: invalidate("products")
+    RedisSvc->>Redis: SMEMBERS mc:tag:<hash(products)>
+    Redis-->>RedisSvc: ["mc:product:1", "mc:product:2"]
+    loop for each member key
+        RedisSvc->>Redis: HGET <key> options
+        Redis-->>RedisSvc: options (check autoInvalidate)
+        alt autoInvalidate true (default)
+            RedisSvc->>Redis: PIPELINE:\n  DEL <key>\n  DEL <key>:tags\n  GET <key>:tags → decrementTagRefs
+            Redis-->>RedisSvc: done
+        else autoInvalidate false
+            RedisSvc->>RedisSvc: skip deletion for this key
+        end
+    end
+    RedisSvc->>Redis: DEL mc:tag:<hash(products)>
+    Redis-->>RedisSvc: deleted
+    RedisSvc-->>CacheMod: void
+    CacheMod-->>App: void

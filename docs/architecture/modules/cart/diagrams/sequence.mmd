@@ -1,0 +1,52 @@
+---
+title: Add to Cart Workflow — Sequence Diagram
+---
+sequenceDiagram
+    actor Customer
+    participant StoreAPI as Store API Route<br/>/store/carts/:id/line-items
+    participant WF as addToCartWorkflow
+    participant ValStep as validateVariantsStep
+    participant PriceStep as getVariantPricingStep
+    participant AddStep as addLineItemsStep
+    participant PromoStep as refreshAdjustmentsStep
+    participant TaxStep as refreshTaxLinesStep
+    participant CartSvc as CartModuleService
+    participant ProdSvc as ProductModuleService
+    participant PricingSvc as PricingModuleService
+    participant PromoSvc as PromotionModuleService
+    participant TaxSvc as TaxModuleService
+    participant DB as PostgreSQL
+
+    Customer->>StoreAPI: POST /store/carts/:id/line-items { variant_id, quantity }
+    StoreAPI->>WF: workflow.run({ cartId, items: [{ variant_id, quantity }] })
+
+    WF->>ValStep: validateVariants([variant_id])
+    ValStep->>ProdSvc: listProductVariants({ id: [variant_id] })
+    ProdSvc-->>ValStep: [ProductVariantDTO]
+    ValStep-->>WF: validated variants
+
+    WF->>PriceStep: getVariantPricing(variant_id, cartContext)
+    PriceStep->>PricingSvc: calculateVariantPrices([variant_id], context)
+    PricingSvc-->>PriceStep: [{ variant_id, calculated_price }]
+
+    WF->>AddStep: addLineItems(cartId, items + prices)
+    AddStep->>CartSvc: addLineItems([{ cart_id, variant_id, quantity, unit_price, ... }])
+    CartSvc->>DB: BEGIN
+    CartSvc->>DB: INSERT LineItem
+    CartSvc->>DB: COMMIT
+    AddStep-->>WF: LineItemDTO[]
+
+    WF->>PromoStep: refreshAdjustments(cartId)
+    PromoStep->>PromoSvc: computeActions(cart, promotionCodes)
+    PromoSvc-->>PromoStep: adjustment actions
+    PromoStep->>CartSvc: setLineItemAdjustments(cartId, actions)
+    CartSvc->>DB: DELETE old adjustments; INSERT new adjustments
+
+    WF->>TaxStep: refreshTaxLines(cartId)
+    TaxStep->>TaxSvc: getTaxLines(items, shippingMethods, taxContext)
+    TaxSvc-->>TaxStep: tax line DTOs
+    TaxStep->>CartSvc: addLineItemTaxLines(taxLines)
+    CartSvc->>DB: DELETE old tax lines; INSERT new tax lines
+
+    WF-->>StoreAPI: CartDTO (with recomputed totals)
+    StoreAPI-->>Customer: 200 OK { cart: CartDTO }

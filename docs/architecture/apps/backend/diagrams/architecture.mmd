@@ -1,0 +1,96 @@
+---
+title: "@dtc/backend — Architecture Diagram"
+---
+graph TB
+    subgraph Clients
+        SF["Storefront\n(Next.js :8000)"]
+        ADMIN["Admin Browser\n(Dashboard)"]
+    end
+
+    subgraph BackendServer["backend-server  (WORKER_MODE=server)"]
+        direction TB
+        MW["Express Middleware\nCORS · Auth · Body Parser"]
+        ROUTER["HTTP Router\nAuto-discovered routes"]
+
+        subgraph APIs["API Namespaces"]
+            STORE_API["/store/*\nStore API"]
+            ADMIN_API["/admin/*\nAdmin API"]
+            AUTH_API["/auth/*\nAuth API"]
+            CUSTOM_STORE["/store/custom/*\nCustom Store Routes"]
+            CUSTOM_ADMIN["/admin/custom/*\nCustom Admin Routes"]
+            CLOUD_AUTH["/cloud/auth/*\nCloud Auth Bridge"]
+        end
+
+        subgraph CoreModules["Built-in Medusa Modules"]
+            PRODUCT["Product"]
+            ORDER["Order"]
+            CART["Cart"]
+            CUSTOMER["Customer"]
+            PAYMENT["Payment"]
+            FULFILLMENT["Fulfillment"]
+            INVENTORY["Inventory"]
+            PRICING["Pricing"]
+        end
+
+        subgraph CustomModules["Custom Domain Modules (src/modules/)"]
+            LOYALTY["loyalty\nPoints & Rewards"]
+            ADMIN_BFF["admin-bff\nAdmin BFF"]
+            CATALOG["commerce-catalog\nCatalog Extensions"]
+            IDENTITY["customer-identity\nAuth & Identity"]
+            CHECKOUT_PAY["checkout-payment\nPayment Orchestration"]
+            ORDER_FULFILL["order-fulfillment\nFulfillment Routing"]
+        end
+
+        WF["Workflow Engine\n(createWorkflow / createStep)"]
+        LINKS["Module Links\n(src/links/)"]
+        ADMIN_EXT["Admin Extensions\n(src/admin/widgets)"]
+    end
+
+    subgraph BackendWorker["backend-worker  (WORKER_MODE=worker)"]
+        SUBSCRIBERS["Subscribers\n(src/subscribers/)"]
+        JOBS["Scheduled Jobs\n(src/jobs/)"]
+    end
+
+    subgraph Infrastructure
+        PG[("PostgreSQL\nMikroORM")]
+        REDIS[("Redis\nQueue · Cache")]
+    end
+
+    subgraph ExternalServices
+        STRIPE["Stripe API"]
+        EMAIL["Email Provider"]
+    end
+
+    SF -->|"publishable key\nHTTPS REST"| MW
+    ADMIN -->|"JWT Bearer\nHTTPS REST"| MW
+    MW --> ROUTER
+    ROUTER --> STORE_API & ADMIN_API & AUTH_API & CUSTOM_STORE & CUSTOM_ADMIN & CLOUD_AUTH
+
+    STORE_API & ADMIN_API & AUTH_API --> WF
+    CUSTOM_STORE & CUSTOM_ADMIN --> WF
+    WF --> CoreModules
+    WF --> CustomModules
+    CoreModules & CustomModules --> PG
+    LINKS -.->|"cross-module FK"| CoreModules
+    LINKS -.->|"cross-module FK"| CustomModules
+
+    BackendServer -->|"emit events"| REDIS
+    REDIS -->|"consume events"| BackendWorker
+    SUBSCRIBERS --> WF
+    JOBS --> WF
+
+    CHECKOUT_PAY -->|"HTTPS"| STRIPE
+    IDENTITY -->|"email notifications"| EMAIL
+    BackendServer & BackendWorker --> PG
+
+    classDef module fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    classDef infra fill:#fef3c7,stroke:#f59e0b,color:#78350f
+    classDef external fill:#f3f4f6,stroke:#9ca3af,color:#374151
+    classDef api fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef worker fill:#fce7f3,stroke:#db2777,color:#831843
+
+    class LOYALTY,ADMIN_BFF,CATALOG,IDENTITY,CHECKOUT_PAY,ORDER_FULFILL module
+    class PG,REDIS infra
+    class STRIPE,EMAIL external
+    class STORE_API,ADMIN_API,AUTH_API,CUSTOM_STORE,CUSTOM_ADMIN,CLOUD_AUTH api
+    class SUBSCRIBERS,JOBS worker

@@ -1,0 +1,55 @@
+classDiagram
+    direction TB
+
+    class ICacheService {
+        <<interface>>
+        +get~T~(key: string) Promise~T | null~
+        +set(key: string, data: unknown, ttl?: number) Promise~void~
+        +invalidate(key: string) Promise~void~
+    }
+
+    class InMemoryCacheService {
+        -store: LRUMap~string, CacheEntry~
+        -options: InMemoryCacheOptions
+        +get~T~(key: string) Promise~T | null~
+        +set(key: string, data: unknown, ttl?: number) Promise~void~
+        +invalidate(key: string) Promise~void~
+        -isExpired(entry: CacheEntry) boolean
+        -computeExpiry(ttl?: number) number | null
+    }
+
+    class LRUMap~K, V~ {
+        -map: Map~K, V~
+        -max: number
+        +get(key: K) V | undefined
+        +set(key: K, value: V) void
+        +delete(key: K) boolean
+        +size() number
+        -evictOldest() void
+    }
+
+    class CacheEntry~T~ {
+        <<interface>>
+        +data: T
+        +expiresAt: number | null
+    }
+
+    class InMemoryCacheOptions {
+        <<interface>>
+        +ttl?: number
+        +max?: number
+    }
+
+    class ModuleDefinition {
+        <<module config>>
+        +key: Modules.CACHE
+        +resolve: string
+        +options?: InMemoryCacheOptions
+    }
+
+    ICacheService <|.. InMemoryCacheService : implements
+    InMemoryCacheService *-- LRUMap : stores entries in
+    InMemoryCacheService ..> CacheEntry : reads / writes
+    InMemoryCacheService ..> InMemoryCacheOptions : configured by
+    LRUMap ..> CacheEntry : holds
+    ModuleDefinition ..> InMemoryCacheService : registers

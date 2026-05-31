@@ -1,0 +1,126 @@
+@startuml @medusajs/core-flows Architecture
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam componentStyle rectangle
+skinparam defaultFontName "Helvetica Neue"
+
+title @medusajs/core-flows — Workflow Architecture (v2.15.4)
+
+' ======== Callers ========
+actor "API Route" as APIRoute
+actor "Background Job" as Job
+actor "Custom Workflow" as CustomWf
+
+' ======== Cart Domain ========
+package "Cart Workflows" {
+  component [createCartsWorkflow] as CreateCarts
+  component [addToCartWorkflow] as AddToCart
+  component [completeCartWorkflow] as CompleteCart
+  component [updateCartWorkflow] as UpdateCart
+}
+
+' ======== Order Domain ========
+package "Order Workflows" {
+  component [createOrderWorkflow] as CreateOrder
+  component [cancelOrderWorkflow] as CancelOrder
+  component [createReturnWorkflow] as CreateReturn
+  component [createExchangeWorkflow] as CreateExchange
+}
+
+' ======== Product Domain ========
+package "Product Workflows" {
+  component [createProductsWorkflow] as CreateProducts
+  component [updateProductsWorkflow] as UpdateProducts
+  component [importProductsWorkflow] as ImportProducts
+}
+
+' ======== Payment Domain ========
+package "Payment Workflows" {
+  component [authorizePaymentSessionWorkflow] as AuthPayment
+  component [capturePaymentWorkflow] as CapturePayment
+  component [refundPaymentWorkflow] as RefundPayment
+}
+
+' ======== Shared Steps ========
+package "Shared Steps" {
+  component [confirmInventoryStep] as ConfirmInv
+  component [reserveInventoryStep] as ReserveInv
+  component [useQueryGraphStep] as QueryGraph
+}
+
+' ======== Hooks ========
+package "Extension Hooks" {
+  component [cartCompleted hook] as HookCart
+  component [orderCreated hook] as HookOrder
+  component [productsCreated hook] as HookProduct
+}
+
+' ======== Orchestration ========
+package "Orchestration Engine" {
+  component [@medusajs/orchestration\n(DistributedTransaction)] as Orchestration
+  database "Transaction State\n(DB / in-memory)" as TxStore
+}
+
+' ======== Module Services ========
+package "Module Services (via DI Container)" {
+  component [Cart Module] as CartSvc
+  component [Order Module] as OrderSvc
+  component [Product Module] as ProductSvc
+  component [Payment Module] as PaymentSvc
+  component [Inventory Module] as InvSvc
+  component [Query Engine] as QEngine
+}
+
+' ======== Relations ========
+APIRoute --> CompleteCart : ".run()"
+APIRoute --> CreateProducts : ".run()"
+Job --> ImportProducts : ".run()"
+CustomWf --> CreateProducts : ".runAsStep()"
+
+' completeCartWorkflow steps
+CompleteCart --> QueryGraph
+CompleteCart --> ConfirmInv
+CompleteCart --> ReserveInv
+CompleteCart --> AuthPayment
+CompleteCart --> CreateOrder
+CompleteCart --> HookCart
+
+' createOrderWorkflow
+CreateOrder --> HookOrder
+
+' product
+CreateProducts --> HookProduct
+
+' Steps to modules
+ConfirmInv --> InvSvc
+ReserveInv --> InvSvc
+QueryGraph --> QEngine
+CreateCarts --> CartSvc
+AddToCart --> CartSvc
+CreateOrder --> OrderSvc
+CancelOrder --> OrderSvc
+CreateProducts --> ProductSvc
+AuthPayment --> PaymentSvc
+CapturePayment --> PaymentSvc
+RefundPayment --> PaymentSvc
+
+' Orchestration
+CompleteCart ..> Orchestration : "transaction lifecycle"
+Orchestration --> TxStore : "persist state"
+
+note right of HookCart
+  Hooks execute AFTER the
+  final step — outside the
+  transaction boundary.
+  Hook failures do NOT
+  roll back business data.
+end note
+
+note bottom of Orchestration
+  On step failure:
+  compensation functions run
+  in reverse order (LIFO).
+  Each compensate is idempotent.
+end note
+
+@enduml

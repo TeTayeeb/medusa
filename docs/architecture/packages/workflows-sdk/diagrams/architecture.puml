@@ -1,0 +1,123 @@
+@startuml @medusajs/workflows-sdk Architecture
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam componentStyle rectangle
+skinparam defaultFontName "Helvetica Neue"
+
+title @medusajs/framework/workflows-sdk — Execution Model (v2.15.4)
+
+' ======== Author API ========
+package "Workflow Author API" {
+  component [createStep()] as CreateStep
+  component [createWorkflow()] as CreateWorkflow
+  component [transform()] as Transform
+  component [when().then()] as When
+  component [parallelize()] as Parallelize
+  component [createHook()] as CreateHook
+  component [StepResponse] as StepResp
+  component [WorkflowResponse] as WFResp
+}
+
+' ======== Composition ========
+package "Composition Phase (definition time)" {
+  component [WorkflowData<T>\n(Proxy)] as WFData
+  component [TransactionStepsDefinition\n(DAG)] as DAG
+  component [Step Registry] as StepReg
+}
+
+' ======== Execution ========
+package "Execution Phase (runtime)" {
+  component [ReturnWorkflow\n.run() / .runAsStep() / .hooks] as ReturnWF
+}
+
+' ======== Orchestration ========
+package "@medusajs/orchestration" {
+  component [DistributedTransaction\nManager] as TxMgr
+  component [Compensation Stack\n(LIFO on failure)] as CompStack
+  interface "IDistributedTransactionStorage" as IStorage
+  component [InMemoryStorage\n(dev/tests)] as InMemStor
+  component [RedisStorage\n(production)] as RedisStor
+  database "Transaction State" as TxState
+}
+
+' ======== Step Execution ========
+package "Step Runtime" {
+  component [invokeFn(input, ctx)] as InvokeFn
+  component [compensateFn(data, ctx)] as CompFn
+  component [StepExecutionContext\n(container, context, metadata)] as StepCtx
+}
+
+' ======== DI ========
+package "DI Container" {
+  component [MedusaContainer\n(Awilix — request scope)] as Container
+  component [Module Services] as ModSvc
+}
+
+' ======== Connections ========
+
+' Composition
+CreateStep --> StepReg
+CreateStep --> WFData
+CreateWorkflow --> DAG
+Transform --> DAG
+When --> DAG
+Parallelize --> DAG
+CreateHook --> DAG
+DAG --> WFData
+
+' Execution
+CreateWorkflow --> ReturnWF
+ReturnWF --> TxMgr : ".run()"
+
+' Orchestration internals
+TxMgr --> IStorage
+IStorage <|.. InMemStor
+IStorage <|.. RedisStor
+InMemStor --> TxState
+RedisStor --> TxState
+TxMgr --> CompStack
+
+' Step execution
+TxMgr --> InvokeFn : "invoke step"
+InvokeFn --> StepResp
+StepResp --> CompStack : "push compensationData"
+CompStack --> CompFn : "on failure (LIFO)"
+
+' Context
+InvokeFn --> StepCtx
+CompFn --> StepCtx
+StepCtx --> Container
+Container --> ModSvc
+
+' Final output
+InvokeFn --> WFResp
+
+note right of WFData
+  WorkflowData<T> is a Proxy.
+  It cannot be read in the
+  composer — only passed as
+  step input or to transform().
+  The engine resolves it at
+  execution time.
+end note
+
+note bottom of CompStack
+  On step failure:
+  • Pop compensationData
+  • Call compensateFn(data, ctx)
+  • Repeat LIFO until empty
+  • Rethrow original error
+  Compensation failures are
+  logged but do not halt
+  the compensation chain.
+end note
+
+note right of RedisStor
+  Enabled when
+  projectConfig.redisUrl
+  is set. Supports durable,
+  resumable workflows across
+  process restarts.
+end note
+
+@enduml

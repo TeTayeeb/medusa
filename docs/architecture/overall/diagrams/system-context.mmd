@@ -1,0 +1,42 @@
+C4Context
+  title System Context — Medusa v2.15.4
+
+  Person(merchant, "Merchant", "Manages catalog, orders, customers, and settings via the Admin Dashboard.")
+  Person(customer, "Customer", "Browses products and places orders via the Storefront.")
+  Person(developer, "Developer", "Integrates with Medusa via REST API or builds custom extensions.")
+
+  System(adminDashboard, "Admin Dashboard", "React SPA (Vite). Provides a full back-office UI for store management: products, orders, customers, promotions, settings.")
+  System(storefront, "Storefront", "Next.js application. Customer-facing shop powered by the Medusa Store API.")
+
+  System_Boundary(medusa, "Medusa Backend") {
+    System(apiServer, "API Server", "Node.js / Express. Exposes Admin REST API (/admin/*), Store REST API (/store/*), and custom routes. Orchestrates business logic via the Workflow Engine.")
+    System(workflowEngine, "Workflow Engine", "Saga-pattern orchestrator. Executes typed steps with built-in compensation (rollback) on failure. Emits lifecycle hooks.")
+    System(moduleLayer, "Commerce Modules", "30+ independent modules: Product, Order, Cart, Payment, Customer, Pricing, Inventory, Promotion, Fulfillment, Auth, Region, Currency, Sales Channel, Stock Location, …")
+    System(framework, "Framework / DI Container", "Awilix-based IoC container. Resolves modules, registers routes, manages DB connections, event bus, caching, and background jobs.")
+  }
+
+  System_Ext(stripe, "Stripe", "Payment gateway. Handles card authorisation, capture, refunds, and webhooks.")
+  System_Ext(sendgrid, "SendGrid", "Transactional email provider. Sends order confirmations, password resets, and notifications.")
+  System_Ext(s3, "S3 / File Storage", "Object storage (AWS S3, MinIO, or compatible). Stores product images and uploaded assets.")
+  System_Ext(postgres, "PostgreSQL 15", "Primary relational database. Stores all commerce data via MikroORM.")
+  System_Ext(redis, "Redis", "Dual-purpose: in-memory cache layer and event-bus transport for async domain events.")
+
+  Rel(merchant, adminDashboard, "Uses", "HTTPS / Browser")
+  Rel(customer, storefront, "Shops on", "HTTPS / Browser")
+  Rel(developer, apiServer, "Calls", "REST / HTTPS")
+
+  Rel(adminDashboard, apiServer, "Admin API requests", "REST / HTTPS / JSON")
+  Rel(storefront, apiServer, "Store API requests", "REST / HTTPS / JSON")
+
+  Rel(apiServer, workflowEngine, "Triggers workflows")
+  Rel(workflowEngine, moduleLayer, "Invokes module services")
+  Rel(moduleLayer, framework, "Resolved via DI container")
+
+  Rel(moduleLayer, postgres, "Reads / writes", "MikroORM / TCP 5432")
+  Rel(framework, redis, "Cache reads/writes + event pub/sub", "ioredis / TCP 6379")
+
+  Rel(moduleLayer, stripe, "Payment operations", "HTTPS / Stripe SDK")
+  Rel(moduleLayer, sendgrid, "Send emails", "HTTPS / SendGrid API")
+  Rel(moduleLayer, s3, "Upload / fetch assets", "HTTPS / AWS SDK")
+
+  UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

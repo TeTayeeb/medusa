@@ -1,0 +1,96 @@
+---
+title: Locking Module — Class Diagram
+---
+classDiagram
+    direction TB
+
+    class ILockingModule {
+        <<interface>>
+        +acquire(keys: string | string[], options?: LockOptions) Promise~void~
+        +release(keys: string | string[], options?: object) Promise~boolean~
+        +execute~T~(keys: string | string[], job: Function, options?: LockOptions) Promise~T~
+    }
+
+    class LockOptions {
+        +expire: number
+    }
+
+    class InProcessLockingProvider {
+        -locks: Map~string, LockQueueEntry[]~
+        +acquire(keys: string[], options?: LockOptions) Promise~void~
+        +release(keys: string[]) Promise~boolean~
+        +execute~T~(keys: string[], job: Function, options?: LockOptions) Promise~T~
+        -sortKeys(keys: string[]) string[]
+    }
+
+    class LockQueueEntry {
+        +resolve: Function
+        +timer: NodeJS.Timeout
+    }
+
+    class RedisLockingProvider {
+        -redlock: Redlock
+        -client: Redis
+        -activeLocks: Map~string, Lock~
+        -retryCount: number
+        -retryDelay: number
+        -retryJitter: number
+        +acquire(keys: string[], options?: LockOptions) Promise~void~
+        +release(keys: string[]) Promise~boolean~
+        +execute~T~(keys: string[], job: Function, options?: LockOptions) Promise~T~
+        -sortKeys(keys: string[]) string[]
+        +onApplicationBootstrap() void
+        +onApplicationShutdown() Promise~void~
+    }
+
+    class PostgreSQLLockingProvider {
+        -db: EntityManager
+        -retryCount: number
+        -retryDelay: number
+        +acquire(keys: string[], options?: LockOptions) Promise~void~
+        +release(keys: string[]) Promise~boolean~
+        +execute~T~(keys: string[], job: Function, options?: LockOptions) Promise~T~
+        -hashKeyToInt64(key: string) bigint
+        -sortKeys(keys: string[]) string[]
+    }
+
+    class LockingModuleOptions {
+        +provider: string
+        +redisUrl: string
+        +retryCount: number
+        +retryDelay: number
+        +retryJitter: number
+    }
+
+    class LockTimeoutError {
+        +key: string
+        +message: string
+    }
+
+    class LockContentionError {
+        +key: string
+        +retryCount: number
+        +message: string
+    }
+
+    class LockReleaseError {
+        +key: string
+        +message: string
+    }
+
+    ILockingModule <|.. InProcessLockingProvider : implements
+    ILockingModule <|.. RedisLockingProvider : implements
+    ILockingModule <|.. PostgreSQLLockingProvider : implements
+
+    InProcessLockingProvider ..> LockQueueEntry : uses
+    InProcessLockingProvider ..> LockTimeoutError : throws
+    InProcessLockingProvider ..> LockContentionError : throws
+
+    RedisLockingProvider ..> LockTimeoutError : throws
+    RedisLockingProvider ..> LockContentionError : throws
+    RedisLockingProvider ..> LockReleaseError : throws
+
+    PostgreSQLLockingProvider ..> LockContentionError : throws
+
+    ILockingModule ..> LockOptions : accepts
+    ILockingModule ..> LockingModuleOptions : configured by

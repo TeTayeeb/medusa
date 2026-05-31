@@ -1,0 +1,45 @@
+sequenceDiagram
+    participant Subscriber as Event Subscriber
+    participant NotifMod as Notification Module
+    participant SGSvc as SendgridNotificationService
+    participant SendGridSDK as @sendgrid/mail
+    participant SendGrid as SendGrid API
+
+    Note over Subscriber,SendGrid: Triggered by order.placed event
+    Subscriber->>NotifMod: createNotifications({ to, template, data, channel: "email", provider_id: "sendgrid" })
+    NotifMod->>NotifMod: route to sendgrid provider
+    NotifMod->>SGSvc: send(notification)
+
+    SGSvc->>SGSvc: validate notification present
+    SGSvc->>SGSvc: map attachments\n(content, filename, content_type, disposition)
+    SGSvc->>SGSvc: resolve sender\nnotification.from?.trim() || config_.from
+
+    alt notification has "content" field (inline HTML mode)
+        SGSvc->>SGSvc: mailContent = { subject, html }
+    else template mode
+        SGSvc->>SGSvc: mailContent = { templateId: notification.template }
+    end
+
+    alt provider_data.personalizations present
+        SGSvc->>SGSvc: message = { from, dynamicTemplateData,\nattachments, personalizations, ...mailContent }
+    else no personalizations
+        SGSvc->>SGSvc: message = { from, dynamicTemplateData,\nattachments, to: notification.to, ...mailContent }
+    end
+
+    SGSvc->>SendGridSDK: mail.send(message)
+    SendGridSDK->>SendGrid: POST /v3/mail/send (JSON body)
+
+    alt SendGrid returns 2xx
+        SendGrid-->>SendGridSDK: 202 Accepted
+        SendGridSDK-->>SGSvc: [response, body]
+        SGSvc-->>NotifMod: {} (success)
+        NotifMod->>NotifMod: mark notification delivered
+    else SendGrid returns error
+        SendGrid-->>SendGridSDK: 4xx / 5xx { errors: [{ message }] }
+        SendGridSDK-->>SGSvc: throws error { code, response.body.errors }
+        SGSvc->>SGSvc: extract errorCode + first error message
+        SGSvc-->>NotifMod: throws MedusaError(UNEXPECTED_STATE,\n"Failed to send email: {code} - {message}")
+        NotifMod->>NotifMod: mark notification failed
+    end
+
+    NotifMod-->>Subscriber: notification result

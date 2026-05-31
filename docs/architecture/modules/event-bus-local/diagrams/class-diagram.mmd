@@ -1,0 +1,66 @@
+classDiagram
+    direction TB
+
+    class IEventBusModuleService {
+        <<interface>>
+        +emit(eventName: string, data: T, options?: Record) Promise~void~
+        +emit(events: EmitData[]) Promise~void~
+        +subscribe(eventName: string, subscriber: Subscriber, context?: SubscriberContext) this
+        +unsubscribe(eventName: string, subscriber: Subscriber, context?: SubscriberContext) this
+    }
+
+    class EventBusLocalService {
+        -subscribers: Map~string, Map~string, Subscriber~~
+        -logger: Logger
+        +emit(eventName: string, data: T, options?) Promise~void~
+        +emit(events: EmitData[]) Promise~void~
+        +subscribe(eventName: string, subscriber: Subscriber, context?) this
+        +unsubscribe(eventName: string, subscriber: Subscriber, context?) this
+        -invokeSubscribers(eventName: string, data: unknown) Promise~void~
+    }
+
+    class EventEmitter {
+        <<Node.js built-in>>
+        +on(event: string, listener: Function) this
+        +emit(event: string, ...args: any[]) boolean
+        +removeListener(event: string, listener: Function) this
+    }
+
+    class EventBusUtils {
+        <<utility>>
+        +groupEventsByQueue(events: EmitData[], groupId: string) void
+        +getGroupedEvents(groupId: string) EmitData[]
+        +clearGroup(groupId: string) void
+    }
+
+    class Subscriber {
+        <<type>>
+        +call(payload: SubscriberArgs) Promise~void~
+    }
+
+    class SubscriberContext {
+        <<interface>>
+        +subscriberId: string
+    }
+
+    class EmitData {
+        <<interface>>
+        +eventName: string
+        +data: unknown
+        +options?: Record~string, unknown~
+    }
+
+    class ModuleDefinition {
+        <<module config>>
+        +key: Modules.EVENT_BUS
+        +resolve: string
+        +options?: EventBusLocalOptions
+    }
+
+    IEventBusModuleService <|.. EventBusLocalService : implements
+    EventBusLocalService *-- EventEmitter : wraps
+    EventBusLocalService ..> EventBusUtils : uses
+    EventBusLocalService ..> Subscriber : invokes
+    EventBusLocalService ..> SubscriberContext : accepts
+    EventBusLocalService ..> EmitData : processes
+    ModuleDefinition ..> EventBusLocalService : registers

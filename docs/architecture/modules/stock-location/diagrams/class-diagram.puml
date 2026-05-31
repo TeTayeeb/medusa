@@ -1,0 +1,87 @@
+@startuml Stock Location Module Class Diagram
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classFontSize 11
+skinparam shadowing false
+
+package "Stock Location Module" {
+
+    class StockLocation {
+        +id : String <<PK>>
+        +name : String <<searchable>>
+        +address_id : String? <<FK>>
+        +metadata : JSON?
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    class StockLocationAddress {
+        +id : String <<PK>>
+        +address_1 : String <<searchable, required>>
+        +address_2 : String? <<searchable>>
+        +company : String?
+        +city : String? <<searchable>>
+        +country_code : String <<searchable, required>>
+        +phone : String?
+        +province : String? <<searchable>>
+        +postal_code : String? <<searchable>>
+        +metadata : JSON?
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    note bottom of StockLocationAddress
+        Cascade delete → StockLocation
+        address_1 required (NOT NULL)
+        country_code required (NOT NULL)
+    end note
+
+    interface IStockLocationService {
+        +createStockLocations(data) : StockLocationDTO
+        +upsertStockLocations(data) : StockLocationDTO
+        +updateStockLocations(id, input) : StockLocationDTO
+        +deleteStockLocations(ids) : void
+        +listStockLocations(filters, config) : StockLocationDTO[]
+        +retrieveStockLocation(id, config) : StockLocationDTO
+        +upsertStockLocationAddresses(data) : StockLocationAddressDTO
+    }
+
+    class StockLocationModuleService {
+        -stockLocationService_ : IMedusaInternalService
+        -stockLocationAddressService_ : IMedusaInternalService
+        -eventBusModuleService_ : IEventBusService?
+        -baseRepository_ : RepositoryService
+    }
+
+    StockLocation "0..1" --> "0..1" StockLocationAddress : belongsTo (address_id FK)
+    StockLocationAddress "1" o-- "0..1" StockLocation : hasOne (cascade delete)
+
+    StockLocationModuleService ..|> IStockLocationService
+    StockLocationModuleService ..> StockLocation
+    StockLocationModuleService ..> StockLocationAddress
+}
+
+package "External References (via Module Links)" {
+    class SalesChannelLink {
+        +sales_channel_id : String
+        +stock_location_id : String
+    }
+
+    class FulfillmentProviderLink {
+        +fulfillment_provider_id : String
+        +stock_location_id : String
+    }
+
+    class InventoryLevelRef {
+        +location_id : String
+        +note: soft reference only
+    }
+}
+
+SalesChannelLink ..> StockLocation : stock_location_id
+FulfillmentProviderLink ..> StockLocation : stock_location_id
+InventoryLevelRef ..> StockLocation : location_id (no FK)
+
+@enduml

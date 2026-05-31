@@ -1,0 +1,89 @@
+---
+title: "@medusajs/modules-sdk — Architecture"
+---
+graph TB
+    subgraph Config["Configuration Layer"]
+        MC[medusa-config.ts]
+        MD[ModulesDefinition Registry\n30+ built-in module entries]
+    end
+
+    subgraph Bootstrap["Bootstrap Layer"]
+        MA[MedusaApp\nFull application bootstrapper]
+        MM[MedusaModule\nSingle-module bootstrapper]
+    end
+
+    subgraph Loaders["Module Loaders"]
+        OL[MikroORM Connection Loader\nDB connect + run migrations]
+        CL[Container Loader Factory\nRegister service + repos]
+        LL[Custom Loaders\nModule-defined startup logic]
+    end
+
+    subgraph Containers["DI Containers — Per Module"]
+        PC[Product Module\nAwilix Container]
+        OC[Order Module\nAwilix Container]
+        IC[Inventory Module\nAwilix Container]
+        XC[... N more modules]
+    end
+
+    subgraph LinkSystem["Link System"]
+        DL[defineLink\nDeclare cross-module relationship]
+        LM[Link Module\nAuto-generated join tables\nOwns cross-module relationships]
+    end
+
+    subgraph QueryEngine["Remote Query Engine"]
+        RQ[RemoteQuery\nCross-module graph fetcher]
+        RJ[RemoteJoiner\nJoinerConfig-based resolver]
+        JC1[Product JoinerConfig\nprimaryKeys, linkableKeys, alias]
+        JC2[Order JoinerConfig]
+        JC3[Inventory JoinerConfig]
+    end
+
+    subgraph AppLayer["Application Layer"]
+        AR[API Routes]
+        WF[Workflow Steps]
+    end
+
+    MC --> MA
+    MD --> MA
+    MA --> MM
+    MM --> OL
+    MM --> CL
+    MM --> LL
+    OL --> PC
+    OL --> OC
+    OL --> IC
+    CL --> PC
+    CL --> OC
+    CL --> IC
+    MA --> LM
+    DL --> LM
+    LM --> JC1
+    PC --> JC1
+    OC --> JC2
+    IC --> JC3
+    JC1 --> RJ
+    JC2 --> RJ
+    JC3 --> RJ
+    RJ --> RQ
+    AR --> RQ
+    WF --> RQ
+    AR --> PC
+    AR --> OC
+    WF --> PC
+    WF --> OC
+
+    classDef bootstrap fill:#4A90D9,color:#fff,stroke:#2C6FA6
+    classDef loader fill:#7B68EE,color:#fff,stroke:#5A4FCC
+    classDef container fill:#48BB78,color:#fff,stroke:#2F855A
+    classDef query fill:#ED8936,color:#fff,stroke:#C05621
+    classDef config fill:#718096,color:#fff,stroke:#4A5568
+    classDef app fill:#FC8181,color:#fff,stroke:#C53030
+    classDef link fill:#B794F4,color:#fff,stroke:#805AD5
+
+    class MA,MM bootstrap
+    class OL,CL,LL loader
+    class PC,OC,IC,XC container
+    class RQ,RJ,JC1,JC2,JC3 query
+    class MC,MD config
+    class AR,WF app
+    class DL,LM link

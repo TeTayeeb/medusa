@@ -1,0 +1,138 @@
+@startuml @dtc/storefront Architecture
+
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam ArrowColor #374151
+skinparam defaultFontName "Segoe UI, Arial"
+skinparam defaultFontSize 11
+skinparam padding 6
+skinparam linetype ortho
+
+title @dtc/storefront — Component Architecture\nNext.js 15 · React 19 · Medusa SDK 2.15.3
+
+' ─── Browser ────────────────────────────────────────────────────────────────
+package "Browser (Customer)" #E0F2FE {
+  component "React Client Components\n(cart drawer, checkout, account)" as CLIENT_COMP
+  component "Stripe PaymentElement\n(@stripe/react-stripe-js)" as STRIPE_EL
+}
+
+' ─── Edge Runtime ───────────────────────────────────────────────────────────
+package "Next.js Edge Runtime" #FDF4FF {
+  component "middleware.ts\nRegion detection\n→ /[countryCode]/ redirect" as MW
+}
+
+' ─── Next.js Server ─────────────────────────────────────────────────────────
+package "Next.js Node.js Runtime  :8000" #F0FDF4 {
+
+  package "App Router  src/app/" #DCFCE7 {
+    package "(main) route group" #BBF7D0 {
+      component "/ — Homepage (SSR)" as P_HOME
+      component "store/ — Listing (SSR+Stream)" as P_STORE
+      component "products/[handle] (SSG+ISR)" as P_PDP
+      component "collections/[handle] (SSR)" as P_COL
+      component "cart/ (CSR)" as P_CART
+      component "checkout/ (CSR)" as P_CHECKOUT
+      component "account/ — Parallel Routes (CSR)" as P_ACCOUNT
+      component "order/[id]/confirmed (SSR)" as P_ORDER
+    }
+  }
+
+  package "Feature Modules  src/modules/" #DBEAFE {
+    component "products/\nProductCard · Gallery\nVariantSelector · PDP Template" as M_PRODUCTS
+    component "cart/\nCartItem · EmptyCart\nItemSelect · SignInPrompt" as M_CART
+    component "checkout/\nAddressForm · ShippingSelect\nPaymentWrapper · ReviewStep\nSubmitButton · DiscountCode" as M_CHECKOUT
+    component "account/\nLoginForm · RegisterForm\nProfileForm · AddressBook" as M_ACCOUNT
+    component "order/\nOrderSummary · LineItems\nConfirmation Template" as M_ORDER
+    component "layout/\nHeader · Footer · NavBar\nCountrySelector" as M_LAYOUT
+    component "common/\nButton · Input · Breadcrumbs" as M_COMMON
+  }
+
+  package "Data Layer  src/lib/data/" #EDE9FE {
+    component "products.ts\ngetProductByHandle()\nlistProducts()" as D_PRODUCTS
+    component "cart.ts\nretrieveCart()\naddToCart()\nupdateLineItem()" as D_CART
+    component "customer.ts\ngetCustomer()\nlogin() · logout()" as D_CUSTOMER
+    component "payment.ts\ninitiatePaymentSession()\nplaceOrder()" as D_PAYMENT
+    component "fulfillment.ts\nlistShippingMethods()\nsetShippingMethod()" as D_FULFILLMENT
+    component "orders.ts\nretrieveOrder()" as D_ORDERS
+    component "regions.ts\ngetRegion()" as D_REGIONS
+    component "cookies.ts\nHTTP-only cookie r/w" as D_COOKIES
+  }
+
+  component "Medusa SDK Client\nsrc/lib/config.ts\n@medusajs/js-sdk\n+ x-medusa-locale header" as SDK
+
+  package "React Context  src/lib/context/" #FEF3C7 {
+    component "modal-context.tsx\ncart drawer state" as CTX_MODAL
+  }
+}
+
+' ─── Medusa Backend ──────────────────────────────────────────────────────────
+package "@dtc/backend  :9000" #FEF9C3 {
+  component "/store/* — Store API" as STORE_API
+  component "/auth/*  — Auth API" as AUTH_API
+}
+
+' ─── External ────────────────────────────────────────────────────────────────
+package "External Services" #F3F4F6 {
+  component "Stripe\n(confirmPayment)" as STRIPE
+  component "CDN / Next.js Image\nOptimisation" as CDN
+}
+
+' ─── Relationships ───────────────────────────────────────────────────────────
+
+' Edge
+CLIENT_COMP -right-> MW  : "HTTP request"
+MW -right-> P_HOME       : "redirect /[cc]/..."
+
+' Pages → Modules
+P_HOME     --> M_LAYOUT
+P_STORE    --> M_PRODUCTS
+P_PDP      --> M_PRODUCTS
+P_COL      --> M_PRODUCTS
+P_CART     --> M_CART
+P_CHECKOUT --> M_CHECKOUT
+P_ACCOUNT  --> M_ACCOUNT
+P_ORDER    --> M_ORDER
+
+' Pages → Data Layer (server-only)
+P_HOME     --> D_PRODUCTS
+P_STORE    --> D_PRODUCTS
+P_PDP      --> D_PRODUCTS
+P_COL      --> D_PRODUCTS
+P_CART     --> D_CART
+P_CHECKOUT --> D_CART
+P_CHECKOUT --> D_PAYMENT
+P_CHECKOUT --> D_FULFILLMENT
+P_ACCOUNT  --> D_CUSTOMER
+P_ACCOUNT  --> D_ORDERS
+P_ORDER    --> D_ORDERS
+
+' Cookies helper
+D_COOKIES ..> D_CART     : "cart ID cookie"
+D_COOKIES ..> D_CUSTOMER : "auth cookie"
+
+' Data layer → SDK
+D_PRODUCTS   --> SDK
+D_CART       --> SDK
+D_CUSTOMER   --> SDK
+D_PAYMENT    --> SDK
+D_FULFILLMENT --> SDK
+D_ORDERS     --> SDK
+D_REGIONS    --> SDK
+
+' SDK → Backend
+SDK --> STORE_API : "HTTPS REST\npublishable key"
+SDK --> AUTH_API  : "HTTPS REST\nJWT cookie"
+
+' Client-side payment
+M_CHECKOUT --> STRIPE_EL
+STRIPE_EL  --> STRIPE : "browser SDK"
+
+' Images
+P_PDP   --> CDN
+P_STORE --> CDN
+
+' Cart context
+M_CART   --> CTX_MODAL
+M_LAYOUT --> CTX_MODAL
+
+@enduml

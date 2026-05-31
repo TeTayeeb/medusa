@@ -1,0 +1,187 @@
+@startuml Fulfillment Module — Class Diagram
+!theme plain
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor #FAFAFA
+    BorderColor #333333
+    ArrowColor #555555
+}
+
+enum GeoZoneType {
+    country
+    province
+    city
+    zip
+}
+
+enum ShippingOptionPriceType {
+    flat_rate
+    calculated
+}
+
+enum RuleOperator {
+    eq
+    ne
+    gt
+    gte
+    lt
+    lte
+    in
+    nin
+}
+
+class FulfillmentSet {
+    + id : String <<PK, prefix:fuset>>
+    + name : String <<unique>>
+    + type : String
+    + metadata : JSON <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class ServiceZone {
+    + id : String <<PK, prefix:serzo>>
+    + name : String <<unique>>
+    + metadata : JSON <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class GeoZone {
+    + id : String <<PK, prefix:fgz>>
+    + type : GeoZoneType = country
+    + country_code : String
+    + province_code : String <<nullable>>
+    + city : String <<nullable>>
+    + postal_expression : JSON <<nullable>>
+    + metadata : JSON <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class ShippingProfile {
+    + id : String <<PK, prefix:sp>>
+    + name : String <<unique>>
+    + type : String
+    + metadata : JSON <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class ShippingOptionType {
+    + id : String <<PK, prefix:sotyp>>
+    + label : String
+    + description : String <<nullable>>
+    + code : String
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class FulfillmentProvider {
+    + id : String <<PK>>
+    + is_enabled : Boolean = true
+    + created_at : DateTime
+    + updated_at : DateTime
+}
+
+class ShippingOption {
+    + id : String <<PK, prefix:so>>
+    + name : String <<searchable, translatable>>
+    + price_type : ShippingOptionPriceType = flat_rate
+    + data : JSON <<nullable>>
+    + metadata : JSON <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class ShippingOptionRule {
+    + id : String <<PK, prefix:sorul>>
+    + attribute : String
+    + operator : RuleOperator
+    + value : JSON <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+}
+
+class Fulfillment {
+    + id : String <<PK, prefix:ful>>
+    + location_id : String
+    + packed_at : DateTime <<nullable>>
+    + shipped_at : DateTime <<nullable>>
+    + marked_shipped_by : String <<nullable>>
+    + created_by : String <<nullable>>
+    + delivered_at : DateTime <<nullable>>
+    + canceled_at : DateTime <<nullable>>
+    + data : JSON <<nullable>>
+    + requires_shipping : Boolean = true
+    + metadata : JSON <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class FulfillmentItem {
+    + id : String <<PK, prefix:fulit>>
+    + title : String
+    + sku : String
+    + barcode : String
+    + quantity : BigNumber
+    + line_item_id : String <<nullable>>
+    + inventory_item_id : String <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class FulfillmentLabel {
+    + id : String <<PK, prefix:fulla>>
+    + tracking_number : String
+    + tracking_url : String
+    + label_url : String
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class FulfillmentAddress {
+    + id : String <<PK>>
+    + first_name : String <<nullable>>
+    + last_name : String <<nullable>>
+    + address_1 : String <<nullable>>
+    + address_2 : String <<nullable>>
+    + city : String <<nullable>>
+    + country_code : String <<nullable>>
+    + province : String <<nullable>>
+    + postal_code : String <<nullable>>
+    + phone : String <<nullable>>
+    + metadata : JSON <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+FulfillmentSet "1" *-- "0..*" ServiceZone : service_zones >
+ServiceZone "1" *-- "0..*" GeoZone : geo_zones >
+ServiceZone "1" *-- "0..*" ShippingOption : shipping_options >
+ShippingOption "0..1" -- "1" ShippingOptionType : type >
+ShippingOption "0..*" -- "0..1" ShippingProfile : shipping_profile >
+ShippingOption "0..*" -- "0..1" FulfillmentProvider : provider >
+ShippingOption "1" *-- "0..*" ShippingOptionRule : rules >
+ShippingOption "1" o-- "0..*" Fulfillment : fulfillments >
+Fulfillment "1" *-- "0..*" FulfillmentItem : items >
+Fulfillment "1" *-- "0..*" FulfillmentLabel : labels >
+Fulfillment "1" *-- "0..1" FulfillmentAddress : delivery_address >
+Fulfillment "0..*" -- "0..1" FulfillmentProvider : provider >
+
+GeoZone ..> GeoZoneType
+ShippingOption ..> ShippingOptionPriceType
+ShippingOptionRule ..> RuleOperator
+
+@enduml

@@ -1,0 +1,65 @@
+sequenceDiagram
+    participant Client
+    participant MedusaAPI as Medusa API
+    participant AuthMod as Auth Module
+    participant EPService as EmailPassAuthService
+    participant IdentitySvc as AuthIdentityService (DB)
+    participant ScryptKDF as scrypt-kdf
+
+    Note over Client,ScryptKDF: Registration
+    Client->>MedusaAPI: POST /auth/customer/emailpass/register\n{ email, password }
+    MedusaAPI->>AuthMod: register(actor_type, provider, body)
+    AuthMod->>EPService: register(userData, authIdentityService)
+    EPService->>EPService: validate email & password (strings)
+    EPService->>IdentitySvc: retrieve({ entity_id: email })
+    alt identity not found
+        IdentitySvc-->>EPService: MedusaError(NOT_FOUND)
+        EPService->>ScryptKDF: kdf(password, hashConfig)
+        ScryptKDF-->>EPService: hashBuffer
+        EPService->>IdentitySvc: create({ entity_id: email, provider_metadata: { password: base64 } })
+        IdentitySvc-->>EPService: authIdentity
+    else identity exists, app_metadata empty
+        IdentitySvc-->>EPService: authIdentity (unclaimed)
+        EPService->>ScryptKDF: kdf(password, hashConfig)
+        ScryptKDF-->>EPService: hashBuffer
+        EPService->>IdentitySvc: update(email, { provider_metadata: { password: base64 } })
+        IdentitySvc-->>EPService: authIdentity
+    else identity exists, app_metadata present
+        IdentitySvc-->>EPService: authIdentity (claimed)
+        EPService-->>AuthMod: { success: false, error: "Identity already exists" }
+        AuthMod-->>MedusaAPI: 400 error
+        MedusaAPI-->>Client: { message: "Identity already exists" }
+    end
+    EPService->>EPService: deep copy + delete provider_metadata.password
+    EPService-->>AuthMod: { success: true, authIdentity }
+    AuthMod->>AuthMod: sign JWT (actor_id, app_metadata)
+    AuthMod-->>MedusaAPI: { token }
+    MedusaAPI-->>Client: { token }
+
+    Note over Client,ScryptKDF: Authentication
+    Client->>MedusaAPI: POST /auth/customer/emailpass\n{ email, password }
+    MedusaAPI->>AuthMod: authenticate(actor_type, provider, body)
+    AuthMod->>EPService: authenticate(userData, authIdentityService)
+    EPService->>IdentitySvc: retrieve({ entity_id: email })
+    alt not found
+        IdentitySvc-->>EPService: MedusaError(NOT_FOUND)
+        EPService-->>AuthMod: { success: false, error: "Invalid email or password" }
+    else found
+        IdentitySvc-->>EPService: authIdentity
+        EPService->>EPService: find ProviderIdentity for "emailpass"
+        EPService->>EPService: Buffer.from(storedHash, "base64")
+        EPService->>ScryptKDF: verify(hashBuffer, candidatePassword)
+        alt verify returns true
+            ScryptKDF-->>EPService: true
+            EPService->>EPService: deep copy + delete password
+            EPService-->>AuthMod: { success: true, authIdentity }
+            AuthMod->>AuthMod: sign JWT
+            AuthMod-->>MedusaAPI: { token }
+            MedusaAPI-->>Client: { token }
+        else verify returns false
+            ScryptKDF-->>EPService: false
+            EPService-->>AuthMod: { success: false, error: "Invalid email or password" }
+            AuthMod-->>MedusaAPI: 401
+            MedusaAPI-->>Client: { message: "Invalid email or password" }
+        end
+    end

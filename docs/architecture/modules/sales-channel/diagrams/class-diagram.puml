@@ -1,0 +1,111 @@
+@startuml SalesChannelModule
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classBorderColor #333333
+skinparam classBackgroundColor #FAFAFA
+skinparam arrowColor #555555
+skinparam noteBackgroundColor #FFFFF0
+skinparam noteBorderColor #AAAAAA
+
+title Sales Channel Module — Class Diagram\nMedusa v2.15.4
+
+entity SalesChannel {
+    + id : String <<PK, ULID>>
+    --
+    name : String
+    description : String
+    is_disabled : Boolean
+    metadata : JSON
+    created_at : Timestamp
+    updated_at : Timestamp
+    deleted_at : Timestamp
+}
+
+interface ISalesChannelModuleService {
+    + createSalesChannels(data, ctx) : SalesChannelDTO[]
+    + updateSalesChannels(data, ctx) : SalesChannelDTO[]
+    + deleteSalesChannels(ids, ctx) : void
+    + retrieveSalesChannel(id, config, ctx) : SalesChannelDTO
+    + listSalesChannels(filters, config, ctx) : SalesChannelDTO[]
+    + listAndCountSalesChannels(filters, config, ctx) : Tuple<SalesChannelDTO[], Integer>
+}
+
+class SalesChannelModuleService {
+    - salesChannelRepository : Repository<SalesChannel>
+    + createSalesChannels(data, ctx) : SalesChannelDTO[]
+    + updateSalesChannels(data, ctx) : SalesChannelDTO[]
+    + deleteSalesChannels(ids, ctx) : void
+    + retrieveSalesChannel(id, config, ctx) : SalesChannelDTO
+    + listSalesChannels(filters, config, ctx) : SalesChannelDTO[]
+}
+
+class SalesChannelDTO {
+    + id : String
+    + name : String
+    + description : String
+    + is_disabled : Boolean
+    + metadata : JSON
+    + created_at : Date
+    + updated_at : Date
+    + deleted_at : Date
+}
+
+entity ProductSalesChannelLink <<link>> {
+    + product_id : String <<FK>>
+    + sales_channel_id : String <<FK>>
+}
+
+entity StockLocationSalesChannelLink <<link>> {
+    + stock_location_id : String <<FK>>
+    + sales_channel_id : String <<FK>>
+}
+
+entity ApiKeySalesChannelLink <<link>> {
+    + publishable_key_id : String <<FK>>
+    + sales_channel_id : String <<FK>>
+}
+
+class Product <<external>> {
+    + id : String
+    + title : String
+}
+
+class StockLocation <<external>> {
+    + id : String
+    + name : String
+}
+
+class PublishableApiKey <<external>> {
+    + id : String
+    + token : String
+}
+
+ISalesChannelModuleService <|.. SalesChannelModuleService : implements
+SalesChannelModuleService --> SalesChannel : manages
+SalesChannel ..> SalesChannelDTO : serializes to
+
+SalesChannel "1" -- "0..*" ProductSalesChannelLink : linked to products
+SalesChannel "1" -- "0..*" StockLocationSalesChannelLink : linked to locations
+SalesChannel "1" -- "0..*" ApiKeySalesChannelLink : linked to api keys
+
+Product "1" -- "0..*" ProductSalesChannelLink : available on
+StockLocation "1" -- "0..*" StockLocationSalesChannelLink : serves
+PublishableApiKey "1" -- "0..*" ApiKeySalesChannelLink : resolves to
+
+note top of SalesChannel
+  Modules.SALES_CHANNEL
+  Single table — no FK columns.
+  All associations managed by module link infrastructure.
+end note
+
+note right of ApiKeySalesChannelLink
+  x-publishable-api-key header resolved here.
+  Middleware sets req.publishableKeyScopes.sales_channel_id.
+end note
+
+note bottom of ProductSalesChannelLink
+  Product only visible in storefront if linked.
+  Managed via linkProductsToSalesChannelWorkflow.
+end note
+
+@enduml

@@ -1,0 +1,156 @@
+@startuml Promotion Module — Class Diagram
+!theme plain
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor #FAFAFA
+    BorderColor #333333
+    ArrowColor #555555
+}
+
+enum PromotionType {
+    standard
+    buyget
+}
+
+enum PromotionStatus {
+    draft
+    active
+    inactive
+}
+
+enum ApplicationMethodType {
+    percentage
+    fixed
+    free_shipping
+}
+
+enum ApplicationMethodTargetType {
+    order
+    items
+    shipping
+}
+
+enum ApplicationMethodAllocation {
+    each
+    across
+}
+
+enum PromotionRuleOperator {
+    eq
+    ne
+    gt
+    gte
+    lt
+    lte
+    in
+    nin
+}
+
+enum CampaignBudgetType {
+    usage
+    spend
+}
+
+class Promotion {
+    + id : String <<PK, prefix:promo>>
+    + code : String <<unique, searchable>>
+    + is_automatic : Boolean = false
+    + is_tax_inclusive : Boolean = false
+    + limit : Number <<nullable>>
+    + used : Number = 0
+    + type : PromotionType
+    + status : PromotionStatus = draft
+    + metadata : JSON <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class Campaign {
+    + id : String <<PK, prefix:procamp>>
+    + name : String <<searchable>>
+    + description : String <<nullable, searchable>>
+    + campaign_identifier : String <<unique>>
+    + starts_at : DateTime <<nullable>>
+    + ends_at : DateTime <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class CampaignBudget {
+    + id : String <<PK, prefix:probudg>>
+    + type : CampaignBudgetType
+    + currency_code : String <<nullable>>
+    + limit : BigNumber <<nullable>>
+    + used : BigNumber = 0
+    + attribute : String <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class CampaignBudgetUsage {
+    + id : String <<PK>>
+    + attribute_value : String
+    + used : BigNumber = 0
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class ApplicationMethod {
+    + id : String <<PK, prefix:proappmet>>
+    + type : ApplicationMethodType
+    + target_type : ApplicationMethodTargetType
+    + allocation : ApplicationMethodAllocation <<nullable>>
+    + value : BigNumber <<nullable>>
+    + currency_code : String <<nullable>>
+    + max_quantity : Number <<nullable>>
+    + apply_to_quantity : Number <<nullable>>
+    + buy_rules_min_quantity : Number <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class PromotionRule {
+    + id : String <<PK, prefix:prorul>>
+    + description : String <<nullable>>
+    + attribute : String
+    + operator : PromotionRuleOperator
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class PromotionRuleValue {
+    + id : String <<PK, prefix:prorulval>>
+    + value : String
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+Campaign "1" o-- "0..*" Promotion : promotions >
+Campaign "1" *-- "0..1" CampaignBudget : budget >
+CampaignBudget "1" *-- "0..*" CampaignBudgetUsage : usages >
+
+Promotion "1" *-- "0..1" ApplicationMethod : application_method >
+Promotion "0..*" -- "0..*" PromotionRule : rules\n<<pivot: promotion_promotion_rule>>
+
+ApplicationMethod "0..*" -- "0..*" PromotionRule : target_rules\n<<pivot: application_method_target_rules>>
+ApplicationMethod "0..*" -- "0..*" PromotionRule : buy_rules\n<<pivot: application_method_buy_rules>>
+
+PromotionRule "1" *-- "1..*" PromotionRuleValue : values >
+
+Promotion ..> PromotionType
+Promotion ..> PromotionStatus
+ApplicationMethod ..> ApplicationMethodType
+ApplicationMethod ..> ApplicationMethodTargetType
+ApplicationMethod ..> ApplicationMethodAllocation
+PromotionRule ..> PromotionRuleOperator
+CampaignBudget ..> CampaignBudgetType
+
+@enduml

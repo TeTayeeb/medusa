@@ -1,0 +1,128 @@
+@startuml Pricing Module Class Diagram
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classFontSize 11
+skinparam shadowing false
+
+package "Pricing Module" {
+
+    class PriceSet {
+        +id : String <<PK>>
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    class Price {
+        +id : String <<PK>>
+        +title : String?
+        +currency_code : String
+        +amount : Numeric
+        +raw_amount : JSON
+        +min_quantity : Numeric?
+        +max_quantity : Numeric?
+        +rules_count : Integer
+        +price_set_id : String <<FK>>
+        +price_list_id : String? <<FK>>
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    class PriceRule {
+        +id : String <<PK>>
+        +attribute : String
+        +value : String
+        +operator : String
+        +priority : Integer
+        +price_id : String <<FK>>
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    note bottom of PriceRule
+        operator: eq | gt | gte | lt | lte | in
+        Unique: (price_id, attribute, operator)
+        WHERE deleted_at IS NULL
+    end note
+
+    class PriceList {
+        +id : String <<PK>>
+        +title : String
+        +description : String
+        +status : Enum
+        +type : Enum
+        +starts_at : DateTime?
+        +ends_at : DateTime?
+        +rules_count : Integer
+        +metadata : JSON?
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    note bottom of PriceList
+        status: draft | active
+        type: sale | override
+    end note
+
+    class PriceListRule {
+        +id : String <<PK>>
+        +attribute : String
+        +value : JSON?
+        +price_list_id : String <<FK>>
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    class PricePreference {
+        +id : String <<PK>>
+        +attribute : String
+        +value : String?
+        +is_tax_inclusive : Boolean
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    note bottom of PricePreference
+        Unique: (attribute, value)
+        WHERE deleted_at IS NULL
+    end note
+
+    interface IPricingModuleService {
+        +createPriceSets(data) : PriceSetDTO
+        +addPrices(data) : PriceSetDTO
+        +deletePriceSets(ids) : void
+        +calculatePrices(filters, context) : CalculatedPriceSet[]
+        +createPriceLists(data) : PriceListDTO
+        +updatePriceLists(id, data) : PriceListDTO
+        +upsertPricePreferences(data) : PricePreferenceDTO[]
+    }
+
+    class PricingModuleService {
+        -pricingRepository_ : PricingRepositoryService
+        -priceSetService_ : IMedusaInternalService
+        -priceService_ : IMedusaInternalService
+        -priceRuleService_ : IMedusaInternalService
+        -priceListService_ : IMedusaInternalService
+        -priceListRuleService_ : IMedusaInternalService
+        -pricePreferenceService_ : IMedusaInternalService
+    }
+
+    class PricingRepositoryService {
+        +calculatePrices(filters, context) : CalculatedPriceSet[]
+        +clearAvailableAttributes() : void
+    }
+
+    PriceSet "1" o-- "0..*" Price : prices (cascade delete)
+    Price "1" o-- "0..*" PriceRule : price_rules (cascade delete)
+    PriceList "1" o-- "0..*" Price : prices (cascade delete)
+    PriceList "1" o-- "0..*" PriceListRule : price_list_rules (cascade delete)
+    PricingModuleService ..|> IPricingModuleService
+    PricingModuleService --> PricingRepositoryService
+}
+
+@enduml

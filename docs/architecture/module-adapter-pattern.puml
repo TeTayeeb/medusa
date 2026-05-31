@@ -1,0 +1,85 @@
+@startuml Module Adapter Pattern
+
+skinparam classStyle rectangle
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+
+title Custom Module — Port/Adapter Pattern\nApplied to all 6 modules
+
+package "Pattern (applies to each module)" {
+
+  interface "«contract»\nModuleContract" as Contract {
+    + healthCheck(): Promise<{module, status}>
+    + ... domain operations ...
+  }
+
+  class "«adapter»\nModuleMedusaAdapter" as Adapter {
+    - container: MedusaContainer
+    + healthCheck(): Promise<{module, status}>
+    + ... Medusa-backed implementations ...
+  }
+
+  Adapter ..|> Contract : implements
+
+  note top of Contract
+    ports/<module>.contract.ts
+    ─────────────────────────
+    • Pure TypeScript interface
+    • Zero Medusa imports
+    • Stable across upgrades
+    • What consumers depend on
+  end note
+
+  note top of Adapter
+    adapters/medusa/<module>.medusa-adapter.ts
+    ─────────────────────────────────────────
+    • Implements Contract
+    • Uses @medusajs/* public APIs only
+    • No */dist/* or */src/* imports
+    • Swappable (mock, stub, v2)
+  end note
+}
+
+package "6 Custom Modules" {
+  class admin_bff       << (M,#ADD8E6) admin-bff >>
+  class checkout_pmt    << (M,#ADD8E6) checkout-payment >>
+  class catalog         << (M,#ADD8E6) commerce-catalog >>
+  class identity        << (M,#ADD8E6) customer-identity >>
+  class loyalty         << (M,#ADD8E6) loyalty >>
+  class fulfillment     << (M,#ADD8E6) order-fulfillment >>
+}
+
+package "Feature Flags (src/shared/feature-flags.ts)" {
+  class FeatureFlags {
+    + adminBffV2: boolean
+    + checkoutPaymentV2: boolean
+    + commerceCatalogV2: boolean
+    + customerIdentityV2: boolean
+    + loyaltyV2: boolean
+    + orderFulfillmentV2: boolean
+  }
+}
+
+package "Medusa Runtime (in-process DI container)" {
+  component [workflow-engine-redis] as wf
+  component [event-bus-redis] as eb
+  component [cache-redis] as cache
+  component [locking-redis] as lock
+}
+
+Adapter ..> wf    : resolves from container
+Adapter ..> eb    : resolves from container
+Adapter ..> cache : resolves from container
+Adapter ..> lock  : resolves from container
+
+FeatureFlags ..> Adapter : gates\nactivation
+
+admin_bff    --|> Adapter
+checkout_pmt --|> Adapter
+catalog      --|> Adapter
+identity     --|> Adapter
+loyalty      --|> Adapter
+fulfillment  --|> Adapter
+
+@enduml

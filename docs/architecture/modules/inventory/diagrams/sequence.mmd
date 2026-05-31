@@ -1,0 +1,61 @@
+sequenceDiagram
+    autonumber
+    participant Customer
+    participant StoreAPI as Store API
+    participant CartWF as addToCartWorkflow
+    participant CartMod as Cart Module
+    participant InvMod as Inventory Module
+    participant InvLevelSvc as InventoryLevelService
+    participant DB as PostgreSQL
+
+    Note over Customer, DB: Add to Cart — Reservation Creation
+
+    Customer->>StoreAPI: POST /store/carts/:id/line-items<br/>{ variant_id, quantity: 2 }
+
+    StoreAPI->>CartWF: execute({ cart_id, variant_id, quantity: 2 })
+
+    CartWF->>CartMod: createLineItemsStep<br/>({ cart_id, variant_id, quantity: 2 })
+    CartMod->>DB: INSERT line_item
+    DB-->>CartMod: line_item_id = "li_01"
+    CartMod-->>CartWF: LineItemDTO
+
+    CartWF->>InvMod: createReservationItems([{<br/>  inventory_item_id: "iitem_01",<br/>  location_id: "sloc_01",<br/>  quantity: 2,<br/>  line_item_id: "li_01"<br/>}])
+
+    InvMod->>InvLevelSvc: confirmInventory("iitem_01", ["sloc_01"], 2)
+    InvLevelSvc->>DB: SELECT SUM(stocked_quantity - reserved_quantity)<br/>WHERE inventory_item_id = 'iitem_01'<br/>AND location_id IN ('sloc_01')<br/>AND deleted_at IS NULL
+    DB-->>InvLevelSvc: available = 10
+
+    alt available >= quantity (10 >= 2)
+        InvLevelSvc-->>InvMod: true
+        InvMod->>DB: INSERT reservation_item<br/>(quantity=2, allow_backorder=false)
+        DB-->>InvMod: ReservationItem
+        InvMod-->>CartWF: ReservationItemDTO
+    else available < quantity and !allow_backorder
+        InvLevelSvc-->>InvMod: false
+        InvMod-->>CartWF: throw NOT_ALLOWED
+        CartWF-->>StoreAPI: 400 Insufficient stock
+    end
+
+    CartWF-->>StoreAPI: updated CartDTO
+    StoreAPI-->>Customer: 200 { cart: { ... } }
+
+    Note over Customer, DB: Order Fulfillment — Stock Deduction
+
+    participant AdminAPI as Admin API
+    participant FulfillWF as createFulfillmentWorkflow
+
+    AdminAPI->>FulfillWF: POST /admin/orders/:id/fulfillments
+
+    FulfillWF->>InvMod: deleteReservationItems(["resitem_01"])
+    InvMod->>DB: UPDATE reservation_item SET deleted_at = now()
+    DB-->>InvMod: ok
+
+    FulfillWF->>InvMod: adjustInventory("iitem_01", "sloc_01", -2)
+    InvMod->>InvLevelSvc: adjustInventory("iitem_01", "sloc_01", -2)
+    InvLevelSvc->>DB: SELECT ... FOR UPDATE (row lock)
+    InvLevelSvc->>DB: UPDATE inventory_level<br/>SET stocked_quantity = stocked_quantity - 2
+    DB-->>InvLevelSvc: updated level
+    InvLevelSvc-->>InvMod: InventoryLevelDTO
+
+    InvMod-->>FulfillWF: ok
+    FulfillWF-->>AdminAPI: FulfillmentDTO

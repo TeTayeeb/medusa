@@ -1,0 +1,160 @@
+@startuml Product Module — Class Diagram
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+package "Product Module" {
+
+  class Product {
+    + id : String <<PK>>
+    + title : String
+    + handle : String <<unique>>
+    + subtitle : String
+    + description : String
+    + is_giftcard : Boolean
+    + status : ProductStatus
+    + thumbnail : String
+    + weight : Float
+    + length : Float
+    + height : Float
+    + width : Float
+    + origin_country : String
+    + hs_code : String
+    + discountable : Boolean
+    + external_id : String
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  class ProductVariant {
+    + id : String <<PK>>
+    + title : String
+    + sku : String
+    + barcode : String
+    + ean : String
+    + upc : String
+    + allow_backorder : Boolean
+    + manage_inventory : Boolean
+    + weight : Float
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  class ProductOption {
+    + id : String <<PK>>
+    + title : String
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  class ProductOptionValue {
+    + id : String <<PK>>
+    + value : String
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  class ProductCollection {
+    + id : String <<PK>>
+    + title : String
+    + handle : String <<unique>>
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  class ProductCategory {
+    + id : String <<PK>>
+    + name : String
+    + handle : String
+    + description : String
+    + is_active : Boolean
+    + is_internal : Boolean
+    + rank : Integer
+    + parent_category_id : String <<FK>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  class ProductTag {
+    + id : String <<PK>>
+    + value : String <<unique>>
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  class ProductType {
+    + id : String <<PK>>
+    + value : String <<unique>>
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  class ProductImage {
+    + id : String <<PK>>
+    + url : String
+    + rank : Integer
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  class ProductModuleService {
+    + listProducts(filters, config, ctx) : ProductDTO[]
+    + retrieveProduct(id, config, ctx) : ProductDTO
+    + createProducts(data[], ctx) : ProductDTO[]
+    + updateProducts(selector, data, ctx) : ProductDTO[]
+    + deleteProducts(ids[], ctx) : void
+    + createProductVariants(data[], ctx) : ProductVariantDTO[]
+    + updateProductVariants(selector, data, ctx) : ProductVariantDTO[]
+    + deleteProductVariants(ids[], ctx) : void
+    + createProductCategories(data[], ctx) : ProductCategoryDTO[]
+    + listProductCategories(filters, config, ctx) : ProductCategoryDTO[]
+    + createProductCollections(data[], ctx) : ProductCollectionDTO[]
+    + upsertProductTags(data[], ctx) : ProductTagDTO[]
+  }
+
+  class ProductCategoryService {
+    + findRoots(ctx) : ProductCategoryDTO[]
+    + findAncestors(id, ctx) : ProductCategoryDTO[]
+    + findDescendants(id, ctx) : ProductCategoryDTO[]
+  }
+
+  enum ProductStatus {
+    DRAFT
+    PROPOSED
+    PUBLISHED
+    REJECTED
+  }
+
+  Product "1" *-- "0..*" ProductVariant : variants
+  Product "1" *-- "0..*" ProductOption : options
+  Product "1" *-- "0..*" ProductImage : images
+  Product "0..*" -- "0..*" ProductTag : tags
+  Product "0..*" --> "0..1" ProductType : type
+  Product "0..*" --> "0..1" ProductCollection : collection
+  Product "0..*" -- "0..*" ProductCategory : categories
+  ProductVariant "0..*" -- "0..*" ProductOptionValue : option_values
+  ProductOption "1" *-- "1..*" ProductOptionValue : values
+  ProductCategory "0..1" --> "0..*" ProductCategory : children
+  ProductModuleService ..> Product : manages
+  ProductModuleService ..> ProductCategoryService : delegates
+  Product --> ProductStatus : status
+}
+
+@enduml

@@ -1,0 +1,83 @@
+@startuml CurrencyModule
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classBorderColor #333333
+skinparam classBackgroundColor #FAFAFA
+skinparam arrowColor #555555
+skinparam noteBackgroundColor #FFFFF0
+skinparam noteBorderColor #AAAAAA
+
+title Currency Module — Class Diagram\nMedusa v2.15.4
+
+entity Currency {
+    + code : String <<PK, ISO 4217>>
+    --
+    name : String
+    symbol : String
+    symbol_native : String
+    decimal_digits : Integer
+    raw_decimal_digits : JSON
+    created_at : Timestamp
+    updated_at : Timestamp
+    deleted_at : Timestamp
+}
+
+interface ICurrencyModuleService {
+    + listCurrencies(filters, config, ctx) : CurrencyDTO[]
+    + listAndCountCurrencies(filters, config, ctx) : Tuple<CurrencyDTO[], Integer>
+    + retrieveCurrency(code, config, ctx) : CurrencyDTO
+}
+
+class CurrencyModuleService {
+    - currencyRepository : Repository<Currency>
+    + listCurrencies(filters, config, ctx) : CurrencyDTO[]
+    + listAndCountCurrencies(filters, config, ctx) : Tuple<CurrencyDTO[], Integer>
+    + retrieveCurrency(code, config, ctx) : CurrencyDTO
+}
+
+class CurrencyDTO {
+    + code : String
+    + name : String
+    + symbol : String
+    + symbol_native : String
+    + decimal_digits : Integer
+    + created_at : Date
+    + updated_at : Date
+    + deleted_at : Date
+}
+
+class FilterableCurrencyProps {
+    + code : String | String[]
+    + name : String
+}
+
+abstract class MedusaService {
+    + {abstract} listX() : DTO[]
+    + {abstract} retrieveX() : DTO
+}
+
+ICurrencyModuleService <|.. CurrencyModuleService : implements
+MedusaService <|-- CurrencyModuleService : extends
+CurrencyModuleService --> Currency : manages
+CurrencyModuleService ..> CurrencyDTO : returns
+CurrencyModuleService ..> FilterableCurrencyProps : accepts
+Currency ..> CurrencyDTO : serializes to
+
+note top of Currency
+  Primary key: ISO 4217 code string (not UUID).
+  ~170 active currencies seeded at boot.
+  Read-only — no write API exposed.
+end note
+
+note right of ICurrencyModuleService
+  Registered as Modules.CURRENCY.
+  All methods accept optional shared context
+  for transaction propagation.
+end note
+
+note bottom of CurrencyDTO
+  decimal_digits is critical for correct
+  monetary arithmetic (JPY=0, USD=2, KWD=3).
+end note
+
+@enduml

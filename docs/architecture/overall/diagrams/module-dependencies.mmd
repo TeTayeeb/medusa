@@ -1,0 +1,81 @@
+graph LR
+    %% ── Module nodes ──────────────────────────────────────────────────────────
+    Cart["🛒 Cart"]
+    Order["📦 Order"]
+    Payment["💳 Payment"]
+    Pricing["🏷 Pricing"]
+    Promotion["🎁 Promotion"]
+    Fulfillment["🚚 Fulfillment"]
+    Inventory["📊 Inventory"]
+    StockLocation["🏭 Stock Location"]
+    Product["📋 Product"]
+    Customer["👤 Customer"]
+    Region["🌍 Region"]
+    Currency["💱 Currency"]
+    SalesChannel["📡 Sales Channel"]
+    Auth["🔐 Auth"]
+    User["👥 User"]
+    Notification["🔔 Notification"]
+    FileModule["📁 File"]
+    WorkflowStore["⚙ Workflow Store"]
+
+    %% ── Cart module links ─────────────────────────────────────────────────────
+    Cart -->|"line items"| Product
+    Cart -->|"cart owner"| Customer
+    Cart -->|"price lists"| Pricing
+    Cart -->|"discount codes"| Promotion
+    Cart -->|"availability scope"| SalesChannel
+    Cart -->|"tax + currency"| Region
+
+    %% ── Order module links ────────────────────────────────────────────────────
+    Order -->|"created from"| Cart
+    Order -->|"payment sessions"| Payment
+    Order -->|"fulfillment sets"| Fulfillment
+    Order -->|"placed by"| Customer
+    Order -->|"reservation checks"| Inventory
+    Order -->|"warehouse source"| StockLocation
+
+    %% ── Pricing module links ──────────────────────────────────────────────────
+    Pricing -->|"variant prices"| Product
+    Pricing -->|"regional pricing"| Region
+    Pricing -->|"currency rules"| Currency
+
+    %% ── Promotion module links ────────────────────────────────────────────────
+    Promotion -->|"price adjustments"| Pricing
+
+    %% ── Fulfillment module links ──────────────────────────────────────────────
+    Fulfillment -->|"pick/pack location"| StockLocation
+    Fulfillment -->|"stock deduction"| Inventory
+
+    %% ── Auth module links ─────────────────────────────────────────────────────
+    Auth -->|"admin identity"| User
+    Auth -->|"shopper identity"| Customer
+
+    %% ── Payment (standalone) note ─────────────────────────────────────────────
+    PaymentNote["ℹ Payment module is standalone.\nIntegrated via provider pattern\n(Stripe, PayPal, …)"]
+    Payment -.->|"no module deps"| PaymentNote
+
+    %% ── Notification links ────────────────────────────────────────────────────
+    Notification -->|"email templates"| FileModule
+
+    %% ── Workflow Store (internal persistence) ─────────────────────────────────
+    WorkflowStore -.->|"persists saga state"| Order
+    WorkflowStore -.->|"persists saga state"| Payment
+
+    %% ── Region ↔ Currency ─────────────────────────────────────────────────────
+    Region -->|"default currency"| Currency
+
+    %% ── Styling ───────────────────────────────────────────────────────────────
+    classDef core       fill:#dbeafe,stroke:#2563eb,color:#1e3a5f,font-weight:bold
+    classDef pricing    fill:#fef3c7,stroke:#d97706,color:#451a03,font-weight:bold
+    classDef fulfil     fill:#dcfce7,stroke:#16a34a,color:#14532d,font-weight:bold
+    classDef identity   fill:#f3e8ff,stroke:#9333ea,color:#2e1065,font-weight:bold
+    classDef infra      fill:#f1f5f9,stroke:#64748b,color:#0f172a
+    classDef note       fill:#fafafa,stroke:#d1d5db,color:#6b7280,font-style:italic
+
+    class Cart,Order,Payment,Product,Customer core
+    class Pricing,Promotion,Region,Currency pricing
+    class Fulfillment,Inventory,StockLocation fulfil
+    class Auth,User,SalesChannel identity
+    class Notification,FileModule,WorkflowStore infra
+    class PaymentNote note

@@ -1,0 +1,55 @@
+classDiagram
+    direction TB
+
+    class Currency {
+        +String code
+        +String name
+        +String symbol
+        +String symbol_native
+        +int decimal_digits
+        +JSON raw_decimal_digits
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+        +listCurrencies(filters, config) CurrencyDTO[]
+        +retrieveCurrency(code, config) CurrencyDTO
+        +listAndCountCurrencies(filters, config) CurrencyDTO[]~number~
+    }
+
+    class CurrencyDTO {
+        <<interface>>
+        +String code
+        +String name
+        +String symbol
+        +String symbol_native
+        +int decimal_digits
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class ICurrencyModuleService {
+        <<interface>>
+        +listCurrencies(filters, config, ctx) CurrencyDTO[]
+        +listAndCountCurrencies(filters, config, ctx) CurrencyDTO[]~number~
+        +retrieveCurrency(code, config, ctx) CurrencyDTO
+    }
+
+    class FilterableCurrencyProps {
+        <<type>>
+        +String~String[]~ code
+        +String name
+    }
+
+    class MedusaService {
+        <<abstract>>
+        +inject(container) void
+    }
+
+    Currency ..|> CurrencyDTO : serializes to
+    ICurrencyModuleService ..> Currency : manages
+    ICurrencyModuleService ..> FilterableCurrencyProps : accepts
+    MedusaService <|-- Currency : extends
+
+    note for Currency "Primary key is ISO 4217 code string.\nRead-only reference data (~170 records).\nSeeded from ISO 4217 standard at boot."
+    note for ICurrencyModuleService "Registered as Modules.CURRENCY.\nNo write methods exposed publicly."

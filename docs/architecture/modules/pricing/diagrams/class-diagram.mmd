@@ -1,0 +1,97 @@
+classDiagram
+    direction TB
+
+    class PriceSet {
+        +String id
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class Price {
+        +String id
+        +String title
+        +String currency_code
+        +BigNumber amount
+        +BigNumber min_quantity
+        +BigNumber max_quantity
+        +Number rules_count
+        +String price_set_id
+        +String price_list_id
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class PriceRule {
+        +String id
+        +String attribute
+        +String value
+        +String operator
+        +Number priority
+        +String price_id
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class PriceList {
+        +String id
+        +String title
+        +String description
+        +String status
+        +String type
+        +Date starts_at
+        +Date ends_at
+        +Number rules_count
+        +JSON metadata
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class PriceListRule {
+        +String id
+        +String attribute
+        +JSON value
+        +String price_list_id
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class PricePreference {
+        +String id
+        +String attribute
+        +String value
+        +Boolean is_tax_inclusive
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class PricingModuleService {
+        +createPriceSets(data) PriceSetDTO
+        +addPrices(data) PriceSetDTO
+        +deletePriceSets(ids) void
+        +calculatePrices(filters, context) CalculatedPriceSet[]
+        +createPriceLists(data) PriceListDTO
+        +updatePriceLists(id, data) PriceListDTO
+        +deletePriceLists(ids) void
+        +upsertPricePreferences(data) PricePreferenceDTO[]
+        +listPricePreferences(filters) PricePreferenceDTO[]
+    }
+
+    class PricingRepositoryService {
+        +calculatePrices(filters, context) CalculatedPriceSet[]
+    }
+
+    PriceSet "1" --> "0..*" Price : has
+    Price "1" --> "0..*" PriceRule : conditions
+    PriceList "1" --> "0..*" Price : overrides
+    PriceList "1" --> "0..*" PriceListRule : eligibility rules
+    PricingModuleService ..> PriceSet : manages
+    PricingModuleService ..> Price : manages
+    PricingModuleService ..> PriceList : manages
+    PricingModuleService ..> PricePreference : manages
+    PricingModuleService --> PricingRepositoryService : delegates calculation

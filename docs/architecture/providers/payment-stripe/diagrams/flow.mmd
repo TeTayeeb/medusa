@@ -1,0 +1,52 @@
+sequenceDiagram
+    participant Client
+    participant MedusaAPI as Medusa API
+    participant PaymentMod as Payment Module
+    participant StripeBase
+    participant StripeSDK as Stripe SDK
+    participant StripeWebhook as Stripe Webhooks
+
+    Note over Client,StripeWebhook: Payment Initiation
+    Client->>MedusaAPI: POST /store/carts/:id/payment-sessions
+    MedusaAPI->>PaymentMod: createPaymentSession(data)
+    PaymentMod->>StripeBase: initiatePayment({ amount, currency_code, context })
+    StripeBase->>StripeBase: getSmallestUnit(amount, currency_code)
+    StripeBase->>StripeBase: normalizePaymentIntentParameters(data)
+    StripeBase->>StripeSDK: stripe.paymentIntents.create(intentRequest, { idempotencyKey })
+    StripeSDK-->>StripeBase: PaymentIntent { id, status }
+    StripeBase-->>PaymentMod: { id: pi_xxx, status: "pending" }
+    PaymentMod-->>MedusaAPI: PaymentSession { id, data: { id: pi_xxx, ... } }
+    MedusaAPI-->>Client: { payment_session }
+
+    Note over Client,StripeWebhook: Authorization (status poll)
+    MedusaAPI->>PaymentMod: authorizePaymentSession(id)
+    PaymentMod->>StripeBase: authorizePayment({ data })
+    StripeBase->>StripeSDK: stripe.paymentIntents.retrieve(pi_xxx)
+    StripeSDK-->>StripeBase: PaymentIntent { status: "requires_capture" }
+    StripeBase-->>PaymentMod: { status: "authorized" }
+    PaymentMod-->>MedusaAPI: PaymentSession updated
+
+    Note over Client,StripeWebhook: Capture
+    MedusaAPI->>PaymentMod: capturePayment(id)
+    PaymentMod->>StripeBase: capturePayment({ data, context })
+    StripeBase->>StripeSDK: stripe.paymentIntents.capture(pi_xxx, { idempotencyKey })
+    StripeSDK-->>StripeBase: PaymentIntent { status: "succeeded" }
+    StripeBase-->>PaymentMod: { data: <intent> }
+
+    Note over StripeWebhook,PaymentMod: Async Webhook (parallel path)
+    StripeWebhook->>MedusaAPI: POST /hooks/payment/stripe (payment_intent.succeeded)
+    MedusaAPI->>PaymentMod: processEvent(event)
+    PaymentMod->>StripeBase: getWebhookActionAndData(body, headers)
+    StripeBase-->>PaymentMod: { action: "captured", data: { session_id } }
+    PaymentMod->>PaymentMod: updatePaymentSession(status: "captured")
+
+    Note over Client,StripeWebhook: Refund
+    Client->>MedusaAPI: POST /admin/orders/:id/refunds
+    MedusaAPI->>PaymentMod: refundPayment({ amount, data })
+    PaymentMod->>StripeBase: refundPayment({ amount, data })
+    StripeBase->>StripeBase: getSmallestUnit(amount, currency)
+    StripeBase->>StripeSDK: stripe.refunds.create({ payment_intent, amount })
+    StripeSDK-->>StripeBase: Refund object
+    StripeBase-->>PaymentMod: { data: <refund> }
+    PaymentMod-->>MedusaAPI: Refund created
+    MedusaAPI-->>Client: { refund }

@@ -1,0 +1,49 @@
+sequenceDiagram
+    actor Admin
+    participant AdminAPI as Admin API
+    participant CreateFulfillmentWF as createFulfillmentWorkflow
+    participant FulfillmentService as IFulfillmentModuleService
+    participant ProviderService as FulfillmentProviderService
+    participant Provider as IFulfillmentProvider (manual/carrier)
+    participant DB as PostgreSQL
+
+    Admin->>AdminAPI: POST /admin/fulfillments\n{ location_id, items, address, shipping_option_id }
+    AdminAPI->>CreateFulfillmentWF: run({ input })
+
+    CreateFulfillmentWF->>FulfillmentService: validateFulfillmentData(providerId, optionData, data)
+    FulfillmentService->>ProviderService: resolve provider from container
+    ProviderService->>Provider: validateFulfillmentData(data, items, context)
+    Provider-->>ProviderService: validated data
+    ProviderService-->>FulfillmentService: OK
+
+    CreateFulfillmentWF->>FulfillmentService: createFulfillment(data, items, order, shippingOption)
+    FulfillmentService->>DB: INSERT fulfillment (location_id, requires_shipping, ...)
+    DB-->>FulfillmentService: Fulfillment record
+
+    FulfillmentService->>DB: INSERT fulfillment_items (title, sku, barcode, quantity, ...)
+    FulfillmentService->>DB: INSERT fulfillment_address (snapshot of delivery address)
+
+    FulfillmentService->>ProviderService: createFulfillment(data, items, order, fulfillmentRecord)
+    ProviderService->>Provider: createFulfillment(...)
+    Provider-->>ProviderService: { data: { carrier_id, tracking_ref, ... } }
+
+    FulfillmentService->>DB: UPDATE fulfillment SET data = provider_response
+    DB-->>FulfillmentService: Updated Fulfillment
+
+    FulfillmentService-->>CreateFulfillmentWF: FulfillmentDTO
+    CreateFulfillmentWF-->>AdminAPI: FulfillmentDTO
+    AdminAPI-->>Admin: 201 Created { fulfillment }
+
+    Note over Admin, DB: Later: Mark as Shipped
+    Admin->>AdminAPI: POST /admin/fulfillments/:id/shipment\n{ labels: [{ tracking_number, tracking_url, label_url }] }
+    AdminAPI->>FulfillmentService: createShipment(id, labels)
+    FulfillmentService->>DB: UPDATE fulfillment SET shipped_at = NOW(), marked_shipped_by = userId
+    FulfillmentService->>DB: INSERT fulfillment_labels (tracking_number, tracking_url, label_url)
+    DB-->>FulfillmentService: Updated Fulfillment + Labels
+    FulfillmentService-->>AdminAPI: FulfillmentDTO with labels
+    AdminAPI-->>Admin: 200 OK { fulfillment }
+
+    Note over Admin, DB: Compensation (if workflow fails)
+    CreateFulfillmentWF->>FulfillmentService: cancelFulfillment(id)
+    FulfillmentService->>Provider: cancelFulfillment(data)
+    FulfillmentService->>DB: UPDATE fulfillment SET canceled_at = NOW()

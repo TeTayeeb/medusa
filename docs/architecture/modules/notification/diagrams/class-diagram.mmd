@@ -1,0 +1,87 @@
+classDiagram
+    direction TB
+
+    class Notification {
+        +String id
+        +String to
+        +String channel
+        +String template
+        +JSON data
+        +String trigger_type
+        +String resource_id
+        +String resource_type
+        +String receiver_id
+        +String provider_id
+        +String status
+        +String external_id
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class NotificationProvider {
+        +String id
+        +String handle
+        +String name
+        +Boolean is_enabled
+        +String[] channels
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class INotificationProvider {
+        <<interface>>
+        +String identifier
+        +String[] channels
+        +send(notification) Object~id~
+    }
+
+    class INotificationModuleService {
+        <<interface>>
+        +createNotifications(data, ctx) NotificationDTO~NotificationDTO[]~
+        +updateNotifications(data, ctx) NotificationDTO[]
+        +listNotifications(filters, config, ctx) NotificationDTO[]
+        +retrieveNotification(id, config, ctx) NotificationDTO
+    }
+
+    class NotificationDTO {
+        <<interface>>
+        +String id
+        +String to
+        +String channel
+        +String template
+        +JSON data
+        +String trigger_type
+        +String resource_id
+        +String resource_type
+        +String receiver_id
+        +String provider_id
+        +String status
+        +String external_id
+    }
+
+    class LocalNotificationProvider {
+        +String identifier
+        +String[] channels
+        +send(notification) Object~id~
+    }
+
+    class SendGridNotificationProvider {
+        +String identifier
+        +String[] channels
+        +String api_key
+        +send(notification) Object~id~
+    }
+
+    Notification "0..*" --> "0..1" NotificationProvider : dispatched via
+    NotificationProvider ..|> INotificationProvider : implements
+    INotificationProvider <|.. LocalNotificationProvider : implements
+    INotificationProvider <|.. SendGridNotificationProvider : implements
+    Notification ..|> NotificationDTO : serializes to
+    INotificationModuleService ..> Notification : manages
+    INotificationModuleService ..> NotificationProvider : resolves
+
+    note for Notification "Modules.NOTIFICATION\nstatus: pending | sent | failed\nexternal_id from provider response."
+    note for NotificationProvider "channels declares which channels handled.\ne.g. LocalProvider: channels=['email']"
+    note for INotificationProvider "Custom providers implement this interface\nand register via medusa-config.ts providers array."

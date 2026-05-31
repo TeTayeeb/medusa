@@ -1,0 +1,86 @@
+---
+title: RBAC Module — Class Diagram
+---
+classDiagram
+    direction TB
+
+    class RbacModuleService {
+        +listRoles(filters?: FilterableRoleProps) Promise~Role[]~
+        +retrieveRole(id: string) Promise~Role~
+        +createRoles(data: CreateRoleDTO[]) Promise~Role[]~
+        +updateRoles(data: UpdateRoleDTO[]) Promise~Role[]~
+        +deleteRoles(ids: string[]) Promise~void~
+        +listPermissions(filters?: object) Promise~Permission[]~
+        +createPermissions(data: CreatePermissionDTO[]) Promise~Permission[]~
+        +deletePermissions(ids: string[]) Promise~void~
+    }
+
+    class Role {
+        +id: string
+        +name: string
+        +description: string
+        +is_system: boolean
+        +permissions: Permission[]
+        +created_at: Date
+        +updated_at: Date
+        +deleted_at: Date
+    }
+
+    class Permission {
+        +id: string
+        +role_id: string
+        +resource: string
+        +action: string
+    }
+
+    class UserRoleLink {
+        +id: string
+        +user_id: string
+        +role_id: string
+        +created_at: Date
+        +deleted_at: Date
+    }
+
+    class RbacMiddleware {
+        -query: IQuery
+        +handle(req: MedusaRequest, res: MedusaResponse, next: Function) void
+        -resolveActor(req: MedusaRequest) string
+        -fetchRoles(userId: string) Promise~Role[]~
+        -flattenPermissions(roles: Role[]) Permission[]
+        -canAccess(permissions: Permission[], resource: string, action: string) boolean
+    }
+
+    class CreateRoleDTO {
+        +name: string
+        +description?: string
+        +permissions: CreatePermissionDTO[]
+    }
+
+    class CreatePermissionDTO {
+        +resource: string
+        +action: string
+    }
+
+    class UpdateRoleDTO {
+        +id: string
+        +name?: string
+        +permissions?: CreatePermissionDTO[]
+    }
+
+    class RbacModuleOptions {
+        +strict_mode: boolean
+        +seed_roles: boolean
+    }
+
+    RbacModuleService "1" --> "*" Role : manages
+    Role "1" --> "*" Permission : has
+    Role "1" ..> "*" UserRoleLink : linked via
+
+    RbacMiddleware --> RbacModuleService : queries roles from
+    RbacMiddleware ..> Permission : evaluates
+
+    RbacModuleService ..> CreateRoleDTO : accepts
+    RbacModuleService ..> UpdateRoleDTO : accepts
+    CreateRoleDTO "1" --> "*" CreatePermissionDTO : contains
+
+    RbacModuleService ..> RbacModuleOptions : configured by

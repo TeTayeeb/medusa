@@ -1,0 +1,67 @@
+sequenceDiagram
+    actor User as Customer/Admin
+    participant Browser
+    participant StoreAPI as Store API Route
+    participant AuthModule as IAuthModuleService
+    participant Provider as Auth Provider (emailpass/github/google)
+    participant DB as PostgreSQL
+    participant Framework as HTTP Framework (JWT Issuer)
+
+    Note over User, Framework: Scenario 1: Email/Password Login
+    User->>StoreAPI: POST /store/auth/emailpass\n{ email, password }
+    StoreAPI->>AuthModule: authenticate("emailpass", { email, password }, "store")
+    AuthModule->>Provider: resolve emailpass provider
+    Provider->>DB: SELECT provider_identity WHERE entity_id=email AND provider='emailpass'
+    DB-->>Provider: ProviderIdentity { provider_metadata: { hash } }
+    Provider->>Provider: bcrypt.compare(password, hash)
+    Provider->>DB: SELECT auth_identity WHERE id = providerIdentity.auth_identity_id
+    DB-->>Provider: AuthIdentity { app_metadata: { actor_id, actor_type } }
+    Provider->>DB: SELECT mfa_factors WHERE auth_identity_id=... AND status='enabled'
+    DB-->>Provider: [] (no MFA factors)
+    Provider-->>AuthModule: { success: true, authIdentity }
+    AuthModule-->>StoreAPI: AuthenticationResponse
+    StoreAPI->>Framework: issue JWT for authIdentity
+    Framework-->>StoreAPI: JWT token
+    StoreAPI-->>User: 200 OK { token: "eyJhbGc..." }
+
+    Note over User, Framework: Scenario 2: OAuth (GitHub) Flow
+    User->>StoreAPI: GET /store/auth/github
+    StoreAPI->>AuthModule: authenticate("github", {}, "store")
+    AuthModule->>Provider: resolve github provider
+    Provider-->>AuthModule: { success: false, location: "https://github.com/login/oauth/authorize?..." }
+    AuthModule-->>StoreAPI: { location: "https://github.com/..." }
+    StoreAPI-->>Browser: 302 Redirect to GitHub
+
+    Browser->>Browser: User authorizes on GitHub
+    Browser->>StoreAPI: GET /store/auth/github/callback?code=abc&state=xyz
+
+    StoreAPI->>AuthModule: validateCallback("github", { code, state }, "store")
+    AuthModule->>Provider: validateCallback(...)
+    Provider->>Provider: verify OAuth state (CSRF check)
+    Provider->>Provider: exchange code for GitHub access token (HTTPS)
+    Provider->>Provider: fetch GitHub user profile (id, login, email)
+    Provider->>DB: UPSERT provider_identity WHERE entity_id=githubId AND provider='github'
+    Provider->>DB: UPSERT auth_identity (if first login)
+    Provider-->>AuthModule: { success: true, authIdentity }
+    AuthModule-->>StoreAPI: AuthenticationResponse
+    StoreAPI->>Framework: issue JWT
+    Framework-->>StoreAPI: JWT
+    StoreAPI-->>Browser: 200 OK { token }
+
+    Note over User, Framework: Scenario 3: MFA Challenge
+    User->>StoreAPI: POST /store/auth/emailpass { email, password }
+    StoreAPI->>AuthModule: authenticate(...)
+    Provider->>DB: SELECT mfa_factors WHERE status='enabled'
+    DB-->>Provider: [AuthMfaFactor { provider: 'totp' }]
+    Provider-->>AuthModule: { success: true, requires_mfa: true, authIdentity }
+    AuthModule-->>StoreAPI: requires_mfa: true
+    StoreAPI-->>User: 200 OK { requires_mfa: true, auth_identity_id }
+
+    User->>StoreAPI: POST /store/auth/mfa/verify { auth_identity_id, code: "123456" }
+    StoreAPI->>AuthModule: verifyMfaFactor(authIdentityId, "totp", "123456")
+    AuthModule->>DB: SELECT mfa_factor, verify TOTP code
+    DB-->>AuthModule: verified
+    AuthModule-->>StoreAPI: { success: true }
+    StoreAPI->>Framework: issue JWT
+    Framework-->>StoreAPI: JWT
+    StoreAPI-->>User: 200 OK { token }

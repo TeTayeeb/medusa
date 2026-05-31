@@ -1,0 +1,76 @@
+classDiagram
+    class Promotion {
+        +String id
+        +String code
+        +Boolean is_automatic
+        +Boolean is_tax_inclusive
+        +Number limit
+        +Number used
+        +PromotionType type
+        +PromotionStatus status
+        +JSON metadata
+        +DateTime deleted_at
+    }
+
+    class Campaign {
+        +String id
+        +String name
+        +String description
+        +String campaign_identifier
+        +DateTime starts_at
+        +DateTime ends_at
+        +DateTime deleted_at
+    }
+
+    class CampaignBudget {
+        +String id
+        +CampaignBudgetType type
+        +String currency_code
+        +BigNumber limit
+        +BigNumber used
+        +String attribute
+        +DateTime deleted_at
+    }
+
+    class CampaignBudgetUsage {
+        +String id
+        +String attribute_value
+        +BigNumber used
+        +DateTime deleted_at
+    }
+
+    class ApplicationMethod {
+        +String id
+        +ApplicationMethodType type
+        +ApplicationMethodTargetType target_type
+        +ApplicationMethodAllocation allocation
+        +BigNumber value
+        +String currency_code
+        +Number max_quantity
+        +Number apply_to_quantity
+        +Number buy_rules_min_quantity
+        +DateTime deleted_at
+    }
+
+    class PromotionRule {
+        +String id
+        +String description
+        +String attribute
+        +PromotionRuleOperator operator
+        +DateTime deleted_at
+    }
+
+    class PromotionRuleValue {
+        +String id
+        +String value
+        +DateTime deleted_at
+    }
+
+    Campaign "1" --> "0..*" Promotion : has many
+    Campaign "1" --> "0..1" CampaignBudget : has one
+    CampaignBudget "1" --> "0..*" CampaignBudgetUsage : has many
+    Promotion "1" --> "0..1" ApplicationMethod : has one
+    Promotion "0..*" --> "0..*" PromotionRule : rules (pivot: promotion_promotion_rule)
+    ApplicationMethod "0..*" --> "0..*" PromotionRule : target_rules (pivot: application_method_target_rules)
+    ApplicationMethod "0..*" --> "0..*" PromotionRule : buy_rules (pivot: application_method_buy_rules)
+    PromotionRule "1" --> "1..*" PromotionRuleValue : values

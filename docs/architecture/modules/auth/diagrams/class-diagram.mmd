@@ -1,0 +1,64 @@
+classDiagram
+    class AuthIdentity {
+        +String id
+        +JSON app_metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class ProviderIdentity {
+        +String id
+        +String entity_id
+        +String provider
+        +JSON user_metadata
+        +JSON provider_metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class AuthMfaFactor {
+        +String id
+        +String provider
+        +String status
+        +JSON provider_metadata
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class AuthMfaRecoveryCode {
+        +String id
+        +String code_hash
+        +DateTime created_at
+        +DateTime deleted_at
+    }
+
+    class IAuthModuleService {
+        <<interface>>
+        +authenticate(provider, data, scope) AuthenticationResponse
+        +validateCallback(provider, data, scope) AuthenticationResponse
+        +createAuthIdentities(data) AuthIdentityDTO[]
+        +updateAuthIdentities(data) AuthIdentityDTO[]
+        +deleteAuthIdentities(ids) void
+        +createMfaFactor(identityId, provider) MfaFactorDTO
+        +verifyMfaFactor(identityId, provider, code) bool
+        +generateMfaRecoveryCodes(identityId, count) string[]
+    }
+
+    class AbstractAuthModuleProvider {
+        <<abstract>>
+        +String PROVIDER$
+        +String DISPLAY_NAME$
+        +authenticate(data, service)* AuthenticationResponse
+        +validateCallback(data, service)* AuthenticationResponse
+    }
+
+    AuthIdentity "1" --> "1..*" ProviderIdentity : provider_identities
+    AuthIdentity "1" --> "0..*" AuthMfaFactor : mfa_factors
+    AuthIdentity "1" --> "0..*" AuthMfaRecoveryCode : mfa_recovery_codes
+    IAuthModuleService ..> AuthIdentity : manages
+    IAuthModuleService ..> ProviderIdentity : manages
+    IAuthModuleService ..> AbstractAuthModuleProvider : delegates to

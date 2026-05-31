@@ -1,0 +1,126 @@
+@startuml UserModule
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classBorderColor #333333
+skinparam classBackgroundColor #FAFAFA
+skinparam arrowColor #555555
+skinparam noteBackgroundColor #FFFFF0
+skinparam noteBorderColor #AAAAAA
+
+title User Module — Class Diagram\nMedusa v2.15.4
+
+entity User {
+    + id : String <<PK, ULID>>
+    --
+    first_name : String
+    last_name : String
+    email : String <<unique>>
+    avatar_url : String
+    metadata : JSON
+    created_at : Timestamp
+    updated_at : Timestamp
+    deleted_at : Timestamp
+}
+
+entity Invite {
+    + id : String <<PK, ULID>>
+    --
+    email : String <<unique>>
+    accepted : Boolean
+    token : String <<hex, 32 bytes>>
+    expires_at : Timestamp
+    metadata : JSON
+    created_at : Timestamp
+    updated_at : Timestamp
+    deleted_at : Timestamp
+}
+
+interface IUserModuleService {
+    + createUsers(data, ctx) : UserDTO[]
+    + updateUsers(data, ctx) : UserDTO[]
+    + deleteUsers(ids, ctx) : void
+    + retrieveUser(id, config, ctx) : UserDTO
+    + listUsers(filters, config, ctx) : UserDTO[]
+    + createInvites(data, ctx) : InviteDTO[]
+    + updateInvites(data, ctx) : InviteDTO[]
+    + deleteInvites(ids, ctx) : void
+    + retrieveInvite(id, config, ctx) : InviteDTO
+    + validateInviteToken(token, ctx) : InviteDTO
+    + retrieveInviteByToken(token, ctx) : InviteDTO
+}
+
+class UserModuleService {
+    - userRepository : Repository<User>
+    - inviteRepository : Repository<Invite>
+    + createUsers(data, ctx) : UserDTO[]
+    + updateUsers(data, ctx) : UserDTO[]
+    + deleteUsers(ids, ctx) : void
+    + createInvites(data, ctx) : InviteDTO[]
+    + validateInviteToken(token, ctx) : InviteDTO
+}
+
+class UserDTO {
+    + id : String
+    + first_name : String
+    + last_name : String
+    + email : String
+    + avatar_url : String
+    + metadata : JSON
+    + created_at : Date
+    + updated_at : Date
+    + deleted_at : Date
+}
+
+class InviteDTO {
+    + id : String
+    + email : String
+    + accepted : Boolean
+    + token : String
+    + expires_at : Date
+    + metadata : JSON
+    + created_at : Date
+    + updated_at : Date
+    + deleted_at : Date
+}
+
+class AuthIdentity <<external>> {
+    + id : String
+    + provider_identity_id : String
+    + provider : String
+}
+
+entity UserAuthIdentityLink <<link>> {
+    + user_id : String <<FK>>
+    + auth_identity_id : String <<FK>>
+}
+
+IUserModuleService <|.. UserModuleService : implements
+UserModuleService --> User : manages
+UserModuleService --> Invite : manages
+User ..> UserDTO : serializes to
+Invite ..> InviteDTO : serializes to
+
+User "1" -- "0..1" UserAuthIdentityLink : linked via
+AuthIdentity "1" -- "0..1" UserAuthIdentityLink : linked via
+
+note top of User
+  Modules.USER
+  email is unique. No passwords stored here.
+  Soft-deletable for audit trail.
+  Admin-only — no storefront customer management.
+end note
+
+note right of Invite
+  Token: crypto.randomBytes(32).toString('hex')
+  TTL: 7 days from created_at (configurable).
+  accepted = true makes token invalid (one-time use).
+  Soft-deleted on revocation.
+end note
+
+note bottom of AuthIdentity
+  External: Auth Module (Modules.AUTH).
+  Linked via module link layer — no FK column in User table.
+  Allows multiple auth providers per user.
+end note
+
+@enduml

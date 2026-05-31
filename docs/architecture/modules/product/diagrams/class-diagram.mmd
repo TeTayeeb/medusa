@@ -1,0 +1,161 @@
+---
+title: Product Module — Class Diagram
+---
+classDiagram
+    direction TB
+
+    class Product {
+        +String id
+        +String title
+        +String handle
+        +String subtitle
+        +String description
+        +Boolean is_giftcard
+        +ProductStatus status
+        +String thumbnail
+        +Float weight
+        +Float length
+        +Float height
+        +Float width
+        +String origin_country
+        +String hs_code
+        +String mid_code
+        +String material
+        +Boolean discountable
+        +String external_id
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class ProductVariant {
+        +String id
+        +String title
+        +String sku
+        +String barcode
+        +String ean
+        +String upc
+        +Boolean allow_backorder
+        +Boolean manage_inventory
+        +Float weight
+        +Float length
+        +Float height
+        +Float width
+        +String origin_country
+        +String hs_code
+        +String mid_code
+        +String material
+        +Integer inventory_quantity
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class ProductOption {
+        +String id
+        +String title
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class ProductOptionValue {
+        +String id
+        +String value
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class ProductCollection {
+        +String id
+        +String title
+        +String handle
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class ProductCategory {
+        +String id
+        +String name
+        +String handle
+        +String description
+        +Boolean is_active
+        +Boolean is_internal
+        +Integer rank
+        +String parent_category_id
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class ProductTag {
+        +String id
+        +String value
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class ProductType {
+        +String id
+        +String value
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class ProductImage {
+        +String id
+        +String url
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class ProductModuleService {
+        +listProducts()
+        +retrieveProduct()
+        +createProducts()
+        +updateProducts()
+        +deleteProducts()
+        +listProductVariants()
+        +createProductVariants()
+        +updateProductVariants()
+        +deleteProductVariants()
+        +listProductCategories()
+        +createProductCategories()
+        +listProductCollections()
+        +createProductCollections()
+        +listProductTags()
+        +upsertProductTags()
+        +listProductTypes()
+    }
+
+    class ProductCategoryService {
+        +findRoots()
+        +findAncestors()
+        +findDescendants()
+    }
+
+    Product "1" --> "*" ProductVariant : has
+    Product "1" --> "*" ProductOption : has
+    Product "*" --> "*" ProductTag : tagged with
+    Product "*" --> "1" ProductType : typed as
+    Product "*" --> "1" ProductCollection : belongs to
+    Product "*" --> "*" ProductCategory : categorized in
+    Product "1" --> "*" ProductImage : has
+    ProductVariant "*" --> "*" ProductOptionValue : configured by
+    ProductOption "1" --> "*" ProductOptionValue : has
+    ProductCategory "1" --> "*" ProductCategory : parent of
+    ProductModuleService --> Product : manages
+    ProductModuleService --> ProductCategoryService : delegates tree ops

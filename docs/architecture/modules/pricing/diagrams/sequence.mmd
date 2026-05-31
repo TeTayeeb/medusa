@@ -1,0 +1,45 @@
+sequenceDiagram
+    autonumber
+    participant StoreFront
+    participant RemoteQuery as Remote Query
+    participant PricingMod as Pricing Module
+    participant PricingRepo as PricingRepositoryService
+    participant DB as PostgreSQL
+
+    Note over StoreFront, DB: Price Calculation on Product Listing
+
+    StoreFront->>RemoteQuery: GET /store/products?currency_code=usd&region_id=reg_01
+
+    RemoteQuery->>RemoteQuery: Expand product variants<br/>Join variant→price_set via Module Link
+    RemoteQuery->>PricingMod: calculatePrices(<br/>  filters: { id: [pset_01, pset_02, ...] },<br/>  context: { currency_code: "usd", region_id: "reg_01" }<br/>)
+
+    PricingMod->>PricingRepo: calculatePrices(filters, context)
+
+    PricingRepo->>DB: SELECT p.*, pl.*, pr.*<br/>FROM price p<br/>LEFT JOIN price_rule pr ON pr.price_id = p.id<br/>LEFT JOIN price_list pl ON pl.id = p.price_list_id<br/>WHERE p.price_set_id IN (filters.id)<br/>AND p.currency_code = 'usd'<br/>AND (pl.id IS NULL OR (pl.status = 'active'<br/>  AND now() BETWEEN pl.starts_at AND pl.ends_at))
+
+    DB-->>PricingRepo: candidate rows
+
+    PricingRepo->>PricingRepo: Evaluate PriceRules against context<br/>(region_id EQ reg_01, etc.)
+    PricingRepo->>PricingRepo: Rank: rules_count DESC → list_type priority<br/>OVERRIDE > SALE > base price
+
+    PricingRepo-->>PricingMod: CalculatedPriceSet[]
+    PricingMod-->>RemoteQuery: CalculatedPriceSet[]
+
+    RemoteQuery->>RemoteQuery: Merge calculated_price into<br/>each ProductVariantDTO
+
+    RemoteQuery-->>StoreFront: ProductDTO[] with prices
+
+    Note over StoreFront, DB: Add Prices to PriceSet (Admin)
+
+    participant AdminAPI as Admin API
+    participant Workflow as addPricesWorkflow
+
+    AdminAPI->>Workflow: POST /admin/products/:id/variants/:v_id<br/>prices: [{ currency_code: "usd", amount: 9999 }]
+
+    Workflow->>PricingMod: addPrices({ price_set_id: pset_01, prices: [...] })
+    PricingMod->>DB: INSERT price (currency_code, amount, price_set_id)
+    PricingMod->>DB: INSERT price_rule (if rules provided)
+    PricingMod->>DB: UPDATE price.rules_count = rule_count
+    DB-->>PricingMod: ok
+    PricingMod-->>Workflow: PriceSetDTO
+    Workflow-->>AdminAPI: updated variant with prices

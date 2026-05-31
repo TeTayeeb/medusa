@@ -1,0 +1,135 @@
+@startuml component-overview
+!theme cerulean-outline
+skinparam componentStyle rectangle
+skinparam defaultFontSize 12
+skinparam titleFontSize 16
+skinparam ArrowColor #555555
+skinparam linetype ortho
+
+title Component Overview — Medusa v2.15.4
+
+' ── Layer 1: Clients ──────────────────────────────────────────────────────────
+package "Layer 1 — Clients" #DBEAFE {
+    [Admin Dashboard\n(React SPA / Vite)]  as AdminUI
+    [Storefront\n(Next.js)]                as Storefront
+    [External Clients\n(Mobile / 3rd-party)] as ExtClient
+}
+
+' ── Layer 2: API Layer ────────────────────────────────────────────────────────
+package "Layer 2 — API Layer  (@medusajs/medusa · Express)" #EDE9FE {
+    [Admin Routes\n/admin/*]   as AdminRoutes
+    [Store Routes\n/store/*]   as StoreRoutes
+    [Custom Routes]            as CustomRoutes
+    [Middleware Pipeline\n(auth · cors · validation · logger)] as Middlewares
+}
+
+' ── Layer 3: Workflow Engine ──────────────────────────────────────────────────
+package "Layer 3 — Workflow Engine  (@medusajs/workflows-sdk)" #FEF3C7 {
+    [WorkflowRunner\n(createWorkflow)] as WFRunner
+    [Typed Steps\n(createStep)]        as Steps
+    [Compensation\n(rollback on fail)] as Compensation
+    [Lifecycle Hooks\n(createHook)]    as Hooks
+    [Parallel Steps\n(parallelize())]  as Parallel
+}
+
+' ── Layer 4: Commerce Modules ─────────────────────────────────────────────────
+package "Layer 4 — Commerce Modules" #DCFCE7 {
+    package "Core Commerce" {
+        [Product]       as Product
+        [Order]         as Order
+        [Cart]          as Cart
+        [Payment]       as Payment
+        [Customer]      as Customer
+    }
+    package "Pricing & Promotions" {
+        [Pricing]       as Pricing
+        [Promotion]     as Promotion
+        [Region]        as Region
+        [Currency]      as Currency
+    }
+    package "Fulfillment & Inventory" {
+        [Fulfillment]    as Fulfillment
+        [Inventory]      as Inventory
+        [Stock Location] as StockLocation
+    }
+    package "Identity & Access" {
+        [Auth]          as Auth
+        [User]          as User
+        [Sales Channel] as SalesChannel
+    }
+    package "File & Notifications" {
+        [File]          as FileModule
+        [Notification]  as Notification
+        [Workflow Store] as WorkflowStore
+    }
+}
+
+' ── Layer 5: Framework ───────────────────────────────────────────────────────
+package "Layer 5 — Framework  (@medusajs/framework)" #FFEDD5 {
+    [DI Container\n(Awilix)]      as DI
+    [HTTP Server\n(Express)]      as HTTP
+    [ORM Layer\n(MikroORM 6)]     as ORM
+    [Event Bus\n(Redis/In-Proc)]  as EventBus
+    [Cache Manager\n(Redis/Mem)]  as Cache
+    [Job Scheduler]               as Jobs
+    [Logger\n(Winston)]           as Logger
+}
+
+' ── Layer 6: Infrastructure ───────────────────────────────────────────────────
+database "PostgreSQL 15"    as PG    #F1F5F9
+database "Redis 7"          as Redis #F1F5F9
+storage  "File Storage\n(S3/MinIO)" as S3 #F1F5F9
+
+' ── Relationships: L1 → L2 ───────────────────────────────────────────────────
+AdminUI    --> AdminRoutes  : "REST / HTTPS"
+Storefront --> StoreRoutes  : "REST / HTTPS"
+ExtClient  --> CustomRoutes : "REST / HTTPS"
+
+AdminRoutes  --> Middlewares
+StoreRoutes  --> Middlewares
+CustomRoutes --> Middlewares
+
+' ── Relationships: L2 → L3 ───────────────────────────────────────────────────
+Middlewares --> WFRunner : "run(input)"
+
+WFRunner --> Steps
+Steps --> Compensation
+Steps --> Hooks
+Steps --> Parallel
+
+' ── Relationships: L3 → L4 ───────────────────────────────────────────────────
+Steps --> Product
+Steps --> Order
+Steps --> Cart
+Steps --> Payment
+Steps --> Customer
+Steps --> Pricing
+Steps --> Fulfillment
+Steps --> Auth
+
+' ── Relationships: L4 → L5 ───────────────────────────────────────────────────
+Product     --> DI : "resolve()"
+Order       --> DI : "resolve()"
+Cart        --> DI : "resolve()"
+Payment     --> DI : "resolve()"
+Customer    --> DI : "resolve()"
+Pricing     --> DI : "resolve()"
+Fulfillment --> DI : "resolve()"
+Auth        --> DI : "resolve()"
+FileModule  --> DI : "resolve()"
+Notification --> DI : "resolve()"
+
+' ── Relationships: L5 → L6 ───────────────────────────────────────────────────
+ORM      --> PG    : "TCP 5432"
+EventBus --> Redis : "TCP 6379"
+Cache    --> Redis : "TCP 6379"
+Jobs     --> Redis : "BullMQ"
+FileModule --> S3  : "HTTPS / AWS SDK"
+
+DI --> ORM
+DI --> EventBus
+DI --> Cache
+DI --> Jobs
+DI --> Logger
+
+@enduml

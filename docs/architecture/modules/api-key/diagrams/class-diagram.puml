@@ -1,0 +1,106 @@
+@startuml API Key Module — Class Diagram
+!theme plain
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor #FAFAFA
+    BorderColor #333333
+    ArrowColor #555555
+}
+
+enum ApiKeyType {
+    secret
+    publishable
+}
+
+class ApiKey {
+    + id : String <<PK, prefix:apk>>
+    + token : String <<unique, hashed for secret>>
+    + salt : String <<bcrypt salt>>
+    + redacted : String <<searchable>>
+    + title : String <<searchable>>
+    + type : ApiKeyType
+    + last_used_at : DateTime <<nullable>>
+    + created_by : String
+    + revoked_by : String <<nullable>>
+    + revoked_at : DateTime <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+    + isActive() : Boolean
+    + isRevoked() : Boolean
+}
+
+interface IApiKeyModuleService {
+    + createApiKeys(data) : ApiKeyDTO[]
+    + updateApiKeys(data) : ApiKeyDTO[]
+    + deleteApiKeys(ids) : void
+    + revokeApiKeys(ids) : ApiKeyDTO[]
+    + authenticate(token) : ApiKeyDTO
+    + retrieveApiKey(id) : ApiKeyDTO
+    + listApiKeys(filters) : ApiKeyDTO[]
+    + listAndCountApiKeys(filters) : [ApiKeyDTO[], Number]
+    + softDeleteApiKeys(ids) : void
+    + restoreApiKeys(ids) : void
+}
+
+class ApiKeyDTO {
+    + id : String
+    + title : String
+    + type : String
+    + redacted : String
+    + last_used_at : DateTime
+    + created_by : String
+    + revoked_by : String
+    + revoked_at : DateTime
+    + created_at : DateTime
+    + updated_at : DateTime
+}
+
+class CreatedApiKeyDTO {
+    + token : String <<plaintext - one time only>>
+}
+
+class FilterableApiKeyProps {
+    + id : String[]
+    + type : ApiKeyType
+    + title : String
+    + revoked_at : DateComparisonOperator
+    + q : String
+}
+
+class SalesChannel {
+    + id : String <<cross-module ref>>
+    + name : String
+}
+
+class "ModuleLink\n(ApiKey ↔ SalesChannel)" as ModuleLink {
+    + api_key_id : String <<FK>>
+    + sales_channel_id : String <<FK>>
+}
+
+ApiKey ..> ApiKeyType : type
+IApiKeyModuleService ..> ApiKey : manages
+IApiKeyModuleService ..> ApiKeyDTO : returns
+IApiKeyModuleService ..> FilterableApiKeyProps : accepts
+CreatedApiKeyDTO --|> ApiKeyDTO : extends
+
+ApiKey "0..*" -- "0..*" SalesChannel : publishable key links
+(ApiKey, SalesChannel) .. ModuleLink
+
+note right of ApiKey
+    token field:
+    - secret type: bcrypt(plaintext, salt)
+    - publishable type: plaintext
+    
+    Revoked when revoked_at IS NOT NULL
+    Soft-deleted when deleted_at IS NOT NULL
+end note
+
+note right of CreatedApiKeyDTO
+    token is ONLY returned
+    at key creation time.
+    Cannot be retrieved again.
+end note
+
+@enduml

@@ -1,0 +1,59 @@
+sequenceDiagram
+    autonumber
+    participant AdminUser
+    participant AdminAPI as Admin API
+    participant CreateWF as createStockLocationsWorkflow
+    participant StockLocMod as Stock Location Module
+    participant RemoteLink as Remote Link Service
+    participant DB as PostgreSQL
+    participant EventBus as Event Bus
+
+    Note over AdminUser, EventBus: Create Stock Location with Address
+
+    AdminUser->>AdminAPI: POST /admin/stock-locations<br/>{ name: "Main Warehouse",<br/>  address: { address_1: "123 Commerce Blvd",<br/>             country_code: "US", city: "Portland" } }
+
+    AdminAPI->>CreateWF: execute(input)
+
+    CreateWF->>StockLocMod: createStockLocations([{<br/>  name: "Main Warehouse",<br/>  address: { address_1: ..., country_code: "US" }<br/>}])
+
+    StockLocMod->>DB: INSERT stock_location_address<br/>{ address_1, country_code, city }
+    DB-->>StockLocMod: laddr_01
+
+    StockLocMod->>DB: INSERT stock_location<br/>{ name: "Main Warehouse", address_id: "laddr_01" }
+    DB-->>StockLocMod: sloc_01
+
+    StockLocMod->>EventBus: emit("stock-location.created", { id: "sloc_01" })
+    EventBus-->>StockLocMod: ack
+
+    StockLocMod-->>CreateWF: StockLocationDTO
+    CreateWF-->>AdminAPI: StockLocationDTO
+    AdminAPI-->>AdminUser: 201 { stock_location: { id: "sloc_01", ... } }
+
+    Note over AdminUser, EventBus: Assign Location to Sales Channel
+
+    AdminUser->>AdminAPI: POST /admin/sales-channels/:sc_id/stock-locations<br/>{ location_id: "sloc_01" }
+
+    AdminAPI->>RemoteLink: create({<br/>  SALES_CHANNEL: { sales_channel_id: "sc_01" },<br/>  STOCK_LOCATION: { stock_location_id: "sloc_01" }<br/>})
+    RemoteLink->>DB: INSERT sales_channel_stock_location<br/>{ sales_channel_id, stock_location_id }
+    DB-->>RemoteLink: ok
+    RemoteLink-->>AdminAPI: link created
+    AdminAPI-->>AdminUser: 200 ok
+
+    Note over AdminUser, EventBus: Delete Stock Location
+
+    AdminUser->>AdminAPI: DELETE /admin/stock-locations/sloc_01
+
+    AdminAPI->>StockLocMod: deleteStockLocations(["sloc_01"])
+    StockLocMod->>DB: UPDATE stock_location<br/>SET deleted_at = now()<br/>WHERE id = 'sloc_01'
+    DB-->>StockLocMod: ok
+
+    StockLocMod->>EventBus: emit("stock-location.deleted", { id: "sloc_01" })
+    EventBus-->>StockLocMod: ack
+
+    StockLocMod-->>AdminAPI: void
+
+    AdminAPI->>RemoteLink: removeLinks({ STOCK_LOCATION: { stock_location_id: "sloc_01" } })
+    RemoteLink->>DB: DELETE sales_channel_stock_location<br/>WHERE stock_location_id = 'sloc_01'
+    DB-->>RemoteLink: ok
+
+    AdminAPI-->>AdminUser: 200 { id: "sloc_01", deleted: true }

@@ -1,0 +1,89 @@
+classDiagram
+    direction TB
+
+    class InventoryItem {
+        +String id
+        +String sku
+        +String origin_country
+        +String hs_code
+        +String mid_code
+        +String material
+        +Number weight
+        +Number length
+        +Number height
+        +Number width
+        +Boolean requires_shipping
+        +String description
+        +String title
+        +String thumbnail
+        +JSON metadata
+        +BigNumber reserved_quantity
+        +BigNumber stocked_quantity
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class InventoryLevel {
+        +String id
+        +String location_id
+        +BigNumber stocked_quantity
+        +BigNumber reserved_quantity
+        +BigNumber incoming_quantity
+        +BigNumber available_quantity
+        +JSON metadata
+        +String inventory_item_id
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class ReservationItem {
+        +String id
+        +String line_item_id
+        +String location_id
+        +BigNumber quantity
+        +JSON raw_quantity
+        +Boolean allow_backorder
+        +String external_id
+        +String description
+        +String created_by
+        +JSON metadata
+        +String inventory_item_id
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class InventoryModuleService {
+        +createInventoryItems(input) InventoryItemDTO
+        +updateInventoryItems(input) InventoryItemDTO
+        +deleteInventoryItems(ids) void
+        +createInventoryLevels(input) InventoryLevelDTO
+        +updateInventoryLevels(input) InventoryLevelDTO
+        +adjustInventory(itemId, locationId, qty) InventoryLevelDTO
+        +createReservationItems(input) ReservationItemDTO
+        +updateReservationItems(id, data) ReservationItemDTO
+        +deleteReservationItems(ids) void
+        +deleteReservationItemsByLineItem(lineItemId) void
+        +retrieveAvailableQuantity(itemId, locationIds) BigNumber
+        +confirmInventory(itemId, locationIds, qty) Boolean
+    }
+
+    class InventoryLevelService {
+        +adjustInventory(itemId, locationId, adj, ctx) InventoryLevel
+        +getAvailableQuantity(itemId, locationIds, ctx) BigNumber
+        +getStockedQuantity(itemId, locationIds, ctx) BigNumber
+        +getReservedQuantity(itemId, locationIds, ctx) BigNumber
+    }
+
+    InventoryItem "1" --> "0..*" InventoryLevel : location_levels
+    InventoryItem "1" --> "0..*" ReservationItem : reservation_items
+    InventoryLevel --> InventoryItem : inventory_item_id
+    ReservationItem --> InventoryItem : inventory_item_id
+    InventoryModuleService ..> InventoryItem : manages
+    InventoryModuleService ..> InventoryLevel : manages
+    InventoryModuleService ..> ReservationItem : manages
+    InventoryModuleService --> InventoryLevelService : delegates level ops
+
+    note for InventoryLevel "available_quantity = stocked_quantity - reserved_quantity\n(computed, never stored)"

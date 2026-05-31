@@ -1,0 +1,91 @@
+---
+title: Index (Search) Module — Class Diagram
+---
+classDiagram
+    direction TB
+
+    class IndexModuleService {
+        -provider: ISearchProvider
+        -subscriber: IndexSubscriber
+        +search(indexName: string, query: string, options?: SearchOptions) Promise~SearchResult~
+        +reindex() Promise~ReindexResult~
+        +getProvider() ISearchProvider
+    }
+
+    class ISearchProvider {
+        <<interface>>
+        +createIndex(indexName: string, options?: object) Promise~void~
+        +addDocuments(indexName: string, documents: Document[]) Promise~IndexResponse~
+        +replaceDocuments(indexName: string, documents: Document[]) Promise~IndexResponse~
+        +deleteDocument(indexName: string, id: string) Promise~void~
+        +deleteAllDocuments(indexName: string) Promise~void~
+        +search(indexName: string, query: string, options?: SearchOptions) Promise~SearchResult~
+        +updateSettings(indexName: string, settings: object) Promise~void~
+    }
+
+    class BuiltInSearchProvider {
+        -db: EntityManager
+        +createIndex(indexName: string) Promise~void~
+        +addDocuments(indexName: string, documents: Document[]) Promise~IndexResponse~
+        +replaceDocuments(indexName: string, documents: Document[]) Promise~IndexResponse~
+        +deleteDocument(indexName: string, id: string) Promise~void~
+        +deleteAllDocuments(indexName: string) Promise~void~
+        +search(indexName: string, query: string, options?: SearchOptions) Promise~SearchResult~
+        +updateSettings(indexName: string, settings: object) Promise~void~
+    }
+
+    class SearchDocument {
+        +id: string
+        +index_name: string
+        +document: Record~string, unknown~
+        +search_vector: string
+        +updated_at: Date
+    }
+
+    class IndexSubscriber {
+        -provider: ISearchProvider
+        -transformer: ProductDocumentTransformer
+        -productService: IProductModuleService
+        +handleProductUpsert(event: ProductEvent) Promise~void~
+        +handleProductDelete(event: ProductEvent) Promise~void~
+    }
+
+    class ProductDocumentTransformer {
+        +transform(product: ProductDTO) SearchDocument
+        -flattenVariants(variants: ProductVariantDTO[]) string[]
+        -flattenTags(tags: ProductTagDTO[]) string[]
+    }
+
+    class SearchOptions {
+        +limit: number
+        +offset: number
+        +filters: SearchFilters
+        +sort: string
+        +highlight: boolean
+    }
+
+    class SearchFilters {
+        +collection_id: string[]
+        +category_id: string[]
+        +status: string[]
+        +tags: string[]
+    }
+
+    class SearchResult {
+        +hits: Document[]
+        +count: number
+        +offset: number
+        +query: string
+    }
+
+    IndexModuleService --> ISearchProvider : delegates to
+    IndexModuleService --> IndexSubscriber : owns
+    IndexSubscriber --> ISearchProvider : writes index via
+    IndexSubscriber --> ProductDocumentTransformer : uses
+
+    ISearchProvider <|.. BuiltInSearchProvider : implements
+    BuiltInSearchProvider ..> SearchDocument : stores
+
+    IndexModuleService ..> SearchOptions : accepts
+    IndexModuleService ..> SearchResult : returns
+    SearchOptions --> SearchFilters : contains

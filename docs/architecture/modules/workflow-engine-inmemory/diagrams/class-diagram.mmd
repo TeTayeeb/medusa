@@ -1,0 +1,84 @@
+classDiagram
+    direction TB
+
+    class IWorkflowEngineService {
+        <<interface>>
+        +run(workflowId: string, options: WorkflowRunOptions) Promise~WorkflowResult~
+        +getRunningTransaction(workflowId: string, transactionId: string, options?: TransactionOptions) Promise~DistributedTransaction~
+        +setStepSuccess(options: SetStepSuccessOptions) Promise~WorkflowResult~
+        +setStepFailure(options: SetStepFailureOptions) Promise~WorkflowResult~
+        +subscribe(options: WorkflowSubscribeOptions) void
+        +unsubscribe(options: WorkflowUnsubscribeOptions) void
+    }
+
+    class WorkflowEngineInMemoryService {
+        -orchestrator: DistributedTransactionOrchestrator
+        -transactionStateMap: TransactionStateMap
+        -subscribers: Map~string, WorkflowSubscriber~
+        +run(workflowId: string, options: WorkflowRunOptions) Promise~WorkflowResult~
+        +getRunningTransaction(workflowId: string, transactionId: string, options?) Promise~DistributedTransaction~
+        +setStepSuccess(options: SetStepSuccessOptions) Promise~WorkflowResult~
+        +setStepFailure(options: SetStepFailureOptions) Promise~WorkflowResult~
+        +subscribe(options: WorkflowSubscribeOptions) void
+        +unsubscribe(options: WorkflowUnsubscribeOptions) void
+    }
+
+    class DistributedTransactionOrchestrator {
+        <<workflows-sdk>>
+        +beginTransaction(workflowId: string, handler: TransactionHandlerType, payload?: unknown) Promise~DistributedTransaction~
+        +resume(transaction: DistributedTransaction) Promise~void~
+        +compensate(transaction: DistributedTransaction) Promise~void~
+    }
+
+    class TransactionStateMap {
+        -store: Map~string, DistributedTransactionState~
+        +get(transactionId: string) DistributedTransactionState | undefined
+        +set(transactionId: string, state: DistributedTransactionState) void
+        +delete(transactionId: string) void
+    }
+
+    class DistributedTransaction {
+        <<workflows-sdk>>
+        +transactionId: string
+        +workflowId: string
+        +status: TransactionStatus
+        +steps: Map~string, StepState~
+        +getContext() Record~string, unknown~
+        +hasFinished() boolean
+        +hasReverted() boolean
+    }
+
+    class DistributedTransactionState {
+        <<interface>>
+        +transactionId: string
+        +workflowId: string
+        +status: TransactionStatus
+        +steps: Map~string, StepState~
+        +context: Record~string, unknown~
+    }
+
+    class StepState {
+        <<interface>>
+        +stepId: string
+        +status: StepStatus
+        +output?: unknown
+        +compensationData?: unknown
+    }
+
+    class TransactionStatus {
+        <<enumeration>>
+        not_started
+        invoking
+        done
+        compensating
+        reverted
+        failed
+    }
+
+    IWorkflowEngineService <|.. WorkflowEngineInMemoryService : implements
+    WorkflowEngineInMemoryService *-- DistributedTransactionOrchestrator : delegates to
+    WorkflowEngineInMemoryService *-- TransactionStateMap : stores state in
+    TransactionStateMap ..> DistributedTransactionState : stores
+    DistributedTransaction ..> TransactionStatus : has
+    DistributedTransaction *-- StepState : contains
+    DistributedTransactionState ..> TransactionStatus : has

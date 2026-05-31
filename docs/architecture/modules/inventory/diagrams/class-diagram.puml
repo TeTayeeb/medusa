@@ -1,0 +1,111 @@
+@startuml Inventory Module Class Diagram
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classFontSize 11
+skinparam shadowing false
+
+package "Inventory Module" {
+
+    class InventoryItem {
+        +id : String <<PK>>
+        +sku : String? <<unique>>
+        +origin_country : String?
+        +hs_code : String?
+        +mid_code : String?
+        +material : String?
+        +weight : Numeric?
+        +length : Numeric?
+        +height : Numeric?
+        +width : Numeric?
+        +requires_shipping : Boolean
+        +description : String?
+        +title : String?
+        +thumbnail : String?
+        +metadata : JSON?
+        +reserved_quantity : Numeric <<computed>>
+        +stocked_quantity : Numeric <<computed>>
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    class InventoryLevel {
+        +id : String <<PK>>
+        +inventory_item_id : String <<FK>>
+        +location_id : String
+        +stocked_quantity : Numeric
+        +raw_stocked_quantity : JSON
+        +reserved_quantity : Numeric
+        +raw_reserved_quantity : JSON
+        +incoming_quantity : Numeric
+        +raw_incoming_quantity : JSON
+        +available_quantity : Numeric <<computed>>
+        +metadata : JSON?
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    note bottom of InventoryLevel
+        Unique: (inventory_item_id, location_id)
+        WHERE deleted_at IS NULL
+        available_quantity = stocked - reserved
+        (computed on read, never stored)
+    end note
+
+    class ReservationItem {
+        +id : String <<PK>>
+        +inventory_item_id : String <<FK>>
+        +line_item_id : String?
+        +location_id : String
+        +quantity : Numeric
+        +raw_quantity : JSON
+        +allow_backorder : Boolean
+        +external_id : String?
+        +description : String?
+        +created_by : String?
+        +metadata : JSON?
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    interface IInventoryService {
+        +createInventoryItems(input) : InventoryItemDTO
+        +updateInventoryItems(input) : InventoryItemDTO
+        +deleteInventoryItems(ids) : void
+        +createInventoryLevels(input) : InventoryLevelDTO
+        +updateInventoryLevels(input) : InventoryLevelDTO
+        +adjustInventory(itemId, locId, adj) : InventoryLevelDTO
+        +createReservationItems(input) : ReservationItemDTO
+        +deleteReservationItems(ids) : void
+        +deleteReservationItemsByLineItem(lineItemId) : void
+        +retrieveAvailableQuantity(itemId, locIds) : BigNumber
+        +confirmInventory(itemId, locIds, qty) : Boolean
+    }
+
+    class InventoryModuleService {
+        -inventoryItemService_ : IMedusaInternalService
+        -inventoryLevelService_ : InventoryLevelService
+        -reservationItemService_ : IMedusaInternalService
+        -baseRepository_ : RepositoryService
+        -ensureInventoryLevels(input) : void
+        -sanitizeInventoryLevelInput(input) : input
+    }
+
+    class InventoryLevelService {
+        +adjustInventory(itemId, locationId, adj, ctx) : InventoryLevel
+        +getAvailableQuantity(itemId, locationIds, ctx) : BigNumber
+        +getStockedQuantity(itemId, locationIds, ctx) : BigNumber
+        +getReservedQuantity(itemId, locationIds, ctx) : BigNumber
+    }
+
+    InventoryItem "1" o-- "0..*" InventoryLevel : cascade delete
+    InventoryItem "1" o-- "0..*" ReservationItem : cascade delete
+    InventoryLevel --> InventoryItem
+    ReservationItem --> InventoryItem
+    InventoryModuleService ..|> IInventoryService
+    InventoryModuleService --> InventoryLevelService
+}
+
+@enduml

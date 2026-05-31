@@ -1,0 +1,44 @@
+---
+title: Create Product Workflow — Sequence Diagram
+---
+sequenceDiagram
+    actor Merchant
+    participant AdminAPI as Admin API Route<br/>/admin/products
+    participant WF as createProductWorkflow
+    participant ValStep as validateProductStep
+    participant ProdStep as createProductsStep
+    participant PricingStep as createPricingStep
+    participant InvStep as attachInventoryItemsStep
+    participant ProductSvc as ProductModuleService
+    participant EventBus as Event Bus
+    participant DB as PostgreSQL
+
+    Merchant->>AdminAPI: POST /admin/products {title, variants, options, prices}
+    AdminAPI->>WF: workflow.run(input)
+
+    WF->>ValStep: validate(input)
+    ValStep-->>WF: validated input
+
+    WF->>ProdStep: createProducts(validated)
+    ProdStep->>ProductSvc: createProducts([data])
+    ProductSvc->>DB: BEGIN transaction
+    ProductSvc->>DB: INSERT Product (generate handle)
+    ProductSvc->>DB: UPSERT ProductType / ProductTags
+    ProductSvc->>DB: INSERT ProductOptions
+    ProductSvc->>DB: INSERT ProductOptionValues
+    ProductSvc->>DB: INSERT ProductVariants
+    ProductSvc->>DB: INSERT ProductImages
+    ProductSvc->>DB: COMMIT
+    ProductSvc->>EventBus: emit product.created (after commit)
+    ProdStep-->>WF: ProductDTO[]
+
+    WF->>PricingStep: createPrices(variants, prices)
+    PricingStep-->>WF: PriceSetDTO[]
+
+    WF->>InvStep: createInventoryItems(variants)
+    InvStep-->>WF: InventoryItemDTO[]
+
+    WF-->>AdminAPI: { product: ProductDTO }
+    AdminAPI-->>Merchant: 201 Created
+
+    Note over WF,DB: If any step fails, compensation<br/>runs in reverse: deleteInventoryItems →<br/>deletePrices → deleteProducts

@@ -1,0 +1,49 @@
+@startuml system-context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title System Context — Medusa v2.15.4
+
+' ── Actors ────────────────────────────────────────────────────────────────────
+Person(merchant,   "Merchant",   "Manages catalog, orders, customers, and settings via the Admin Dashboard.")
+Person(customer,   "Customer",   "Browses products and places orders via the Storefront.")
+Person(developer,  "Developer",  "Integrates with Medusa via REST API or builds custom extensions.")
+
+' ── Internal systems ──────────────────────────────────────────────────────────
+System(adminDashboard, "Admin Dashboard",  "React SPA (Vite). Full back-office UI for store management.")
+System(storefront,     "Storefront",       "Next.js application. Customer-facing shop powered by the Medusa Store API.")
+
+System_Boundary(medusaBoundary, "Medusa Backend") {
+    System(apiServer,      "API Server",           "Node.js / Express. Admin API, Store API, Custom routes.\nOrchestrates logic via the Workflow Engine.")
+    System(workflowEngine, "Workflow Engine",      "Saga-pattern orchestrator with step compensation (rollback)\nand lifecycle hooks.")
+    System(moduleLayer,    "Commerce Modules",     "30+ modules: Product, Order, Cart, Payment, Customer,\nPricing, Inventory, Promotion, Fulfillment, Auth, …")
+    System(framework,      "Framework / DI",       "Awilix IoC container, HTTP server, MikroORM DB,\nEvent Bus, Cache, Background Jobs.")
+}
+
+' ── External systems ──────────────────────────────────────────────────────────
+System_Ext(stripe,   "Stripe",            "Payment gateway — authorise, capture, refund, webhooks.")
+System_Ext(sendgrid, "SendGrid",          "Transactional email — order confirmations, notifications.")
+System_Ext(s3,       "S3 / File Storage", "Object storage (AWS S3, MinIO). Product images & assets.")
+System_Ext(postgres, "PostgreSQL 15",     "Primary relational database via MikroORM.")
+System_Ext(redis,    "Redis",             "In-memory cache + event-bus pub/sub transport.")
+
+' ── Relationships ─────────────────────────────────────────────────────────────
+Rel(merchant,   adminDashboard, "Uses",               "HTTPS / Browser")
+Rel(customer,   storefront,     "Shops on",           "HTTPS / Browser")
+Rel(developer,  apiServer,      "Calls",              "REST / HTTPS")
+
+Rel(adminDashboard, apiServer,      "Admin API requests", "REST / HTTPS / JSON")
+Rel(storefront,     apiServer,      "Store API requests", "REST / HTTPS / JSON")
+
+Rel(apiServer,      workflowEngine, "Triggers workflows")
+Rel(workflowEngine, moduleLayer,    "Invokes module services")
+Rel(moduleLayer,    framework,      "Resolved via DI container")
+
+Rel(moduleLayer, postgres, "Reads / writes",                "MikroORM / TCP 5432")
+Rel(framework,   redis,    "Cache + event pub/sub",         "ioredis / TCP 6379")
+Rel(moduleLayer, stripe,   "Payment operations",            "HTTPS / Stripe SDK")
+Rel(moduleLayer, sendgrid, "Send emails",                   "HTTPS / SendGrid API")
+Rel(moduleLayer, s3,       "Upload / fetch assets",         "HTTPS / AWS SDK")
+
+@enduml

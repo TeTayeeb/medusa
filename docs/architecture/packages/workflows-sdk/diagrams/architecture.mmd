@@ -1,0 +1,88 @@
+graph TB
+    subgraph "Workflow Author API"
+        CreateStep["createStep(id, invokeFn, compensateFn)"]
+        CreateWorkflow["createWorkflow(id, composerFn)"]
+        Transform["transform(values, fn)"]
+        When["when(values, cond).then(fn)"]
+        Parallelize["parallelize(...steps)"]
+        CreateHook["createHook(name, data)"]
+    end
+
+    subgraph "Composition Time — DAG Building"
+        WorkflowData["WorkflowData&lt;T&gt;\n(Proxy — lazy reference)"]
+        DAGBuilder["TransactionStepsDefinition\n(DAG)"]
+        StepRegistry["Step Registry\n(stepId → invokeFn + compensateFn)"]
+    end
+
+    subgraph "Execution Time — ReturnWorkflow"
+        RunMethod[".run({ input, idempotencyKey })"]
+        RunAsStep[".runAsStep({ input })"]
+        HooksRegistry[".hooks.hookName(handler)"]
+    end
+
+    subgraph "@medusajs/orchestration — Transaction Engine"
+        TransactionMgr["DistributedTransaction\nManager"]
+        CompensationStack["Compensation Stack\n(LIFO on failure)"]
+        StateStorage{{"Storage Backend"}}
+        InMemory["InMemoryStorage\n(dev / tests)"]
+        Redis["RedisStorage\n(production)"]
+    end
+
+    subgraph "Step Execution Context"
+        Container["MedusaContainer\n(DI — request scope)"]
+        TxContext["Context\n(transactionId,\nidempotencyKey)"]
+        Metadata["Metadata\n(trace context)"]
+    end
+
+    subgraph "Step Lifecycle"
+        InvokeFn["invokeFn(input, ctx)\n→ StepResponse(result, compensateData)"]
+        CompensateFn["compensateFn(compensateData, ctx)\n← on failure"]
+    end
+
+    subgraph "Workflow Responses"
+        StepResp["StepResponse&lt;TOutput, TCompensateInput&gt;"]
+        WorkflowResp["WorkflowResponse&lt;TOutput&gt;\n+ hooks"]
+    end
+
+    %% Composition flow
+    CreateStep -->|"registers"| StepRegistry
+    CreateWorkflow -->|"runs composer"| DAGBuilder
+    Transform -->|"DAG node"| DAGBuilder
+    When -->|"conditional DAG node"| DAGBuilder
+    Parallelize -->|"parallel DAG nodes"| DAGBuilder
+    CreateHook -->|"hook DAG node"| DAGBuilder
+    DAGBuilder --> WorkflowData
+
+    %% Execution flow
+    CreateWorkflow --> RunMethod
+    CreateWorkflow --> RunAsStep
+    CreateWorkflow --> HooksRegistry
+    RunMethod --> TransactionMgr
+
+    %% Engine internals
+    TransactionMgr --> StateStorage
+    StateStorage --> InMemory
+    StateStorage --> Redis
+    TransactionMgr --> CompensationStack
+
+    %% Step execution
+    TransactionMgr -->|"invoke"| InvokeFn
+    InvokeFn --> StepResp
+    StepResp --> CompensationStack
+    CompensationStack -->|"on failure"| CompensateFn
+
+    %% Context
+    InvokeFn --> Container
+    InvokeFn --> TxContext
+    InvokeFn --> Metadata
+    CompensateFn --> Container
+
+    %% Return
+    InvokeFn --> WorkflowResp
+
+    style WorkflowData fill:#f5a623,color:#000
+    style TransactionMgr fill:#9b59b6,color:#fff
+    style CompensationStack fill:#e74c3c,color:#fff
+    style DAGBuilder fill:#27ae60,color:#fff
+    style Redis fill:#c0392b,color:#fff
+    style InMemory fill:#2980b9,color:#fff

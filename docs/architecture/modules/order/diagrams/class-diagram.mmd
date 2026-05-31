@@ -1,0 +1,158 @@
+---
+title: Order Module — Class Diagram
+---
+classDiagram
+    direction TB
+
+    class Order {
+        +String id
+        +Integer display_id
+        +String custom_display_id
+        +String region_id
+        +String customer_id
+        +String sales_channel_id
+        +OrderStatus status
+        +Boolean is_draft_order
+        +String email
+        +String currency_code
+        +Integer version
+        +Boolean no_notification
+        +DateTime canceled_at
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class OrderItem {
+        +String id
+        +String title
+        +String variant_id
+        +String product_id
+        +Integer quantity
+        +Integer fulfilled_quantity
+        +Integer returned_quantity
+        +Integer shipped_quantity
+        +BigNumber unit_price
+        +JSON metadata
+    }
+
+    class OrderShippingMethod {
+        +String id
+        +String name
+        +String shipping_option_id
+        +BigNumber amount
+        +JSON data
+        +JSON metadata
+    }
+
+    class OrderTransaction {
+        +String id
+        +BigNumber amount
+        +String currency_code
+        +String reference
+        +String reference_id
+        +DateTime created_at
+    }
+
+    class OrderChange {
+        +String id
+        +Integer version
+        +OrderChangeStatus status
+        +String requested_by
+        +DateTime confirmed_at
+        +DateTime declined_at
+        +DateTime canceled_at
+        +String note
+    }
+
+    class OrderChangeAction {
+        +String id
+        +ChangeActionType action
+        +JSON details
+        +BigNumber amount
+        +Boolean applied
+    }
+
+    class Return {
+        +String id
+        +ReturnStatus status
+        +String order_id
+        +BigNumber refund_amount
+        +String location_id
+        +Boolean no_notification
+        +DateTime received_at
+        +DateTime canceled_at
+    }
+
+    class ReturnItem {
+        +String id
+        +String item_id
+        +Integer quantity
+        +Integer received_quantity
+        +String reason_id
+        +String note
+    }
+
+    class OrderClaim {
+        +String id
+        +ClaimType type
+        +ClaimStatus claim_status
+        +String order_id
+        +Boolean no_notification
+    }
+
+    class OrderExchange {
+        +String id
+        +ExchangeStatus exchange_status
+        +String order_id
+        +Boolean no_notification
+        +Boolean allow_backorder
+    }
+
+    class OrderSummary {
+        +String id
+        +Integer version
+        +BigNumber total
+        +BigNumber subtotal
+        +BigNumber tax_total
+        +BigNumber discount_total
+        +BigNumber shipping_total
+        +BigNumber paid_total
+        +BigNumber refunded_total
+    }
+
+    class ReturnReason {
+        +String id
+        +String value
+        +String label
+        +String description
+        +String parent_return_reason_id
+    }
+
+    class OrderAddress {
+        +String id
+        +String first_name
+        +String last_name
+        +String company
+        +String address_1
+        +String city
+        +String country_code
+        +String postal_code
+        +String phone
+    }
+
+    Order "1" --> "*" OrderItem : items
+    Order "1" --> "*" OrderShippingMethod : shipping_methods
+    Order "1" --> "*" OrderTransaction : transactions
+    Order "1" --> "*" OrderSummary : summary
+    Order "1" --> "*" Return : returns
+    Order "1" --> "*" OrderChange : changes
+    Order "1" --> "*" OrderClaim : claims
+    Order "1" --> "*" OrderExchange : exchanges
+    Order "1" --> "0..1" OrderAddress : shipping_address
+    Order "1" --> "0..1" OrderAddress : billing_address
+    OrderChange "1" --> "*" OrderChangeAction : actions
+    Return "1" --> "*" ReturnItem : items
+    ReturnItem --> ReturnReason : reason
+    ReturnReason "0..1" --> "*" ReturnReason : children

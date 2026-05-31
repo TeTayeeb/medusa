@@ -1,0 +1,108 @@
+graph TB
+    subgraph "Client Layer"
+        Browser["Browser / Mobile App"]
+        CLI["Admin CLI"]
+        ThirdParty["Third-party Integrations"]
+    end
+
+    subgraph "@medusajs/framework — Runtime"
+        subgraph "HTTP Sub-system"
+            Express["Express.js Server"]
+            RoutesFinder["routes-finder\n(FS walk)"]
+            RoutesSorter["routes-sorter\n(priority ordering)"]
+            RoutesLoader["routes-loader\n(dynamic import)"]
+            MiddlewareLoader["middleware-file-loader"]
+            Policies["Policies\n(Auth / CORS / Rate-limit)"]
+            ZodValidation["Zod Validation\n(validate-body / validate-query)"]
+        end
+
+        subgraph "Application Loader"
+            AppLoader["MedusaAppLoader"]
+            ConfigLoader["Config Loader\n(medusa-config.ts)"]
+        end
+
+        subgraph "DI Container"
+            AwilixContainer["Awilix Container\n(Singleton + Request scopes)"]
+        end
+
+        subgraph "Database"
+            KnexPool["Knex Connection Pool\n(PostgreSQL)"]
+            MikroORM["MikroORM\n(entity managers)"]
+            Migrations["Migration Runner"]
+        end
+
+        subgraph "Module System"
+            ModulesLoader["Modules Loader"]
+            LinkModules["Link Modules\n(cross-module joins)"]
+            RemoteLink["RemoteLink\n(runtime linker)"]
+            Query["Query Engine\n(cross-module reads)"]
+        end
+
+        subgraph "Async Sub-systems"
+            JobsLoader["Jobs Loader\n(cron scheduler)"]
+            SubscribersLoader["Subscribers Loader\n(event bus)"]
+            Telemetry["Telemetry\n(fire-and-forget)"]
+        end
+    end
+
+    subgraph "Commerce Modules"
+        ProductModule["Product Module"]
+        OrderModule["Order Module"]
+        CartModule["Cart Module"]
+        OtherModules["… 27+ more modules"]
+    end
+
+    subgraph "Infrastructure"
+        PostgreSQL[("PostgreSQL")]
+        Redis[("Redis\n(optional)")]
+    end
+
+    %% Client → HTTP
+    Browser -->|HTTPS| Express
+    CLI -->|HTTPS| Express
+    ThirdParty -->|HTTPS| Express
+
+    %% App startup flow
+    AppLoader --> ConfigLoader
+    AppLoader --> AwilixContainer
+    AppLoader --> KnexPool
+    AppLoader --> ModulesLoader
+    AppLoader --> LinkModules
+    AppLoader --> Express
+    AppLoader --> JobsLoader
+    AppLoader --> SubscribersLoader
+
+    %% HTTP internals
+    Express --> RoutesFinder
+    RoutesFinder --> RoutesSorter
+    RoutesSorter --> RoutesLoader
+    Express --> MiddlewareLoader
+    Express --> Policies
+    Policies --> ZodValidation
+    ZodValidation --> RoutesLoader
+
+    %% DI
+    AwilixContainer --> ProductModule
+    AwilixContainer --> OrderModule
+    AwilixContainer --> CartModule
+    AwilixContainer --> OtherModules
+
+    %% DB
+    KnexPool --> MikroORM
+    MikroORM --> PostgreSQL
+    Migrations --> PostgreSQL
+
+    %% Module links
+    ModulesLoader --> AwilixContainer
+    LinkModules --> RemoteLink
+    RemoteLink --> Query
+    Query --> AwilixContainer
+
+    %% Async
+    JobsLoader --> Redis
+    SubscribersLoader --> Redis
+
+    style AppLoader fill:#f5a623,color:#000
+    style Express fill:#4a90d9,color:#fff
+    style AwilixContainer fill:#7ed321,color:#000
+    style PostgreSQL fill:#336791,color:#fff

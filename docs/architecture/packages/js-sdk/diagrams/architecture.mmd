@@ -1,0 +1,156 @@
+---
+title: "@medusajs/js-sdk — Architecture"
+---
+classDiagram
+    direction TB
+
+    namespace EntryPoint {
+        class Medusa {
+            +client: Client
+            +admin: Admin
+            +store: Store
+            +auth: Auth
+            +Medusa(config: Config)
+            +setLocale(locale: string) void
+            +getLocale() string
+        }
+    }
+
+    namespace HTTPCore {
+        class Client {
+            -config: Config
+            -token: string
+            -locale: string
+            +fetch~T~(input, init?) Promise~T~
+            +fetchStream(input, init?) Promise~FetchStreamResponse~
+            +setToken(token) Promise~void~
+            +getToken() Promise~string~
+            +clearToken() Promise~void~
+            +setLocale(locale) void
+        }
+
+        class FetchError {
+            +status: number
+            +statusText: string
+            +FetchError(message, statusText?, status?)
+        }
+
+        class Config {
+            <<interface>>
+            +baseUrl: string
+            +publishableKey?: string
+            +apiKey?: string
+            +auth?: AuthConfig
+            +logger?: Logger
+        }
+    }
+
+    namespace AdminResources {
+        class Admin {
+            +product: Product
+            +order: Order
+            +customer: Customer
+            +customerGroup: CustomerGroup
+            +apiKey: ApiKey
+            +campaign: Campaign
+            +claim: Claim
+            +draftOrder: DraftOrder
+            +exchange: Exchange
+            +fulfillmentSet: FulfillmentSet
+            +inventoryItem: InventoryItem
+            +region: Region
+            +... 20 more resources
+        }
+
+        class AdminProduct {
+            +list(query?, headers?) Promise
+            +retrieve(id, query?, headers?) Promise
+            +create(body, query?, headers?) Promise
+            +update(id, body, query?, headers?) Promise
+            +delete(id, headers?) Promise
+            +import(body, headers?) Promise
+            +export(body, headers?) Promise
+            +confirmImport(txId, headers?) Promise
+        }
+
+        class AdminOrder {
+            +list(query?, headers?) Promise
+            +retrieve(id, query?, headers?) Promise
+            +cancel(id, headers?) Promise
+            +fulfillment(id, body, headers?) Promise
+            +archive(id, headers?) Promise
+        }
+    }
+
+    namespace StoreResources {
+        class Store {
+            +product: StoreProduct
+            +cart: StoreCart
+            +customer: StoreCustomer
+            +order: StoreOrder
+            +collection: StoreCollection
+            +region: StoreRegion
+        }
+
+        class StoreCart {
+            +create(body, headers?) Promise
+            +retrieve(id, query?, headers?) Promise
+            +createLineItem(id, body, headers?) Promise
+            +updateLineItem(cartId, lineId, body, headers?) Promise
+            +deleteLineItem(cartId, lineId, headers?) Promise
+            +addShippingMethod(id, body, headers?) Promise
+            +complete(id, headers?) Promise
+        }
+
+        class StoreProduct {
+            +list(query?, headers?) Promise
+            +retrieve(id, query?, headers?) Promise
+        }
+    }
+
+    namespace AuthModule {
+        class Auth {
+            +login(actor, provider, body, headers?) Promise
+            +logout(headers?) Promise
+            +session(headers?) Promise
+            +callback(actor, provider, body, headers?) Promise
+            +refreshToken(headers?) Promise
+            +register(actor, provider, body, headers?) Promise
+            +mfa: MfaAuth
+        }
+
+        class MfaAuth {
+            +start(body, headers?) Promise
+            +setup(body, headers?) Promise
+            +verify(body, headers?) Promise
+            +disable(body, headers?) Promise
+            +generateRecoveryCodes(body, headers?) Promise
+            +listRecoveryCodes(headers?) Promise
+        }
+    }
+
+    Medusa *-- Client : owns
+    Medusa *-- Admin : owns
+    Medusa *-- Store : owns
+    Medusa *-- Auth : owns
+
+    Admin *-- AdminProduct : product
+    Admin *-- AdminOrder : order
+
+    Store *-- StoreCart : cart
+    Store *-- StoreProduct : product
+
+    Auth *-- MfaAuth : mfa
+
+    AdminProduct --> Client : calls fetch
+    AdminOrder --> Client : calls fetch
+    StoreCart --> Client : calls fetch
+    StoreProduct --> Client : calls fetch
+    Auth --> Client : calls fetch
+
+    Client ..> FetchError : throws on non-2xx
+    Client ..> Config : configured by
+
+    note for Client "Injects Authorization: Bearer token\nInjects x-publishable-api-key\nHandles token storage strategy\n(local / memory / custom)"
+    note for FetchError "Thrown instead of rejection\nCarries .status for branching:\nif (e instanceof FetchError && e.status === 404)"
+    note for StoreCart "complete() returns\n{ type: 'order', order: OrderDTO }\nor { type: 'cart', cart: CartDTO }\non payment required"

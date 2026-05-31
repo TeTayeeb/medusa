@@ -1,0 +1,58 @@
+classDiagram
+    class ApiKey {
+        +String id
+        +String token
+        +String salt
+        +String redacted
+        +String title
+        +ApiKeyType type
+        +DateTime last_used_at
+        +String created_by
+        +String revoked_by
+        +DateTime revoked_at
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+        +isActive() Boolean
+        +isRevoked() Boolean
+    }
+
+    class IApiKeyModuleService {
+        <<interface>>
+        +createApiKeys(data) ApiKeyDTO[]
+        +updateApiKeys(data) ApiKeyDTO[]
+        +deleteApiKeys(ids) void
+        +revokeApiKeys(ids) ApiKeyDTO[]
+        +authenticate(token) ApiKeyDTO
+        +retrieveApiKey(id) ApiKeyDTO
+        +listApiKeys(filters) ApiKeyDTO[]
+        +softDeleteApiKeys(ids) void
+        +restoreApiKeys(ids) void
+    }
+
+    class ApiKeyDTO {
+        +String id
+        +String title
+        +String type
+        +String redacted
+        +DateTime last_used_at
+        +String created_by
+        +String revoked_by
+        +DateTime revoked_at
+        +DateTime created_at
+    }
+
+    class CreatedApiKeyDTO {
+        +String token
+    }
+
+    class ApiKeyType {
+        <<enumeration>>
+        secret
+        publishable
+    }
+
+    ApiKey --> ApiKeyType : type
+    IApiKeyModuleService ..> ApiKey : manages
+    IApiKeyModuleService ..> ApiKeyDTO : returns
+    CreatedApiKeyDTO --|> ApiKeyDTO : extends

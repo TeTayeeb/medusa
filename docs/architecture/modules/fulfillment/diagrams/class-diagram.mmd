@@ -1,0 +1,125 @@
+classDiagram
+    class FulfillmentSet {
+        +String id
+        +String name
+        +String type
+        +JSON metadata
+        +DateTime deleted_at
+    }
+
+    class ServiceZone {
+        +String id
+        +String name
+        +JSON metadata
+        +DateTime deleted_at
+    }
+
+    class GeoZone {
+        +String id
+        +GeoZoneType type
+        +String country_code
+        +String province_code
+        +String city
+        +JSON postal_expression
+        +JSON metadata
+        +DateTime deleted_at
+    }
+
+    class ShippingProfile {
+        +String id
+        +String name
+        +String type
+        +JSON metadata
+        +DateTime deleted_at
+    }
+
+    class ShippingOptionType {
+        +String id
+        +String label
+        +String description
+        +String code
+        +DateTime deleted_at
+    }
+
+    class FulfillmentProvider {
+        +String id
+        +Boolean is_enabled
+    }
+
+    class ShippingOption {
+        +String id
+        +String name
+        +ShippingOptionPriceType price_type
+        +JSON data
+        +JSON metadata
+        +DateTime deleted_at
+    }
+
+    class ShippingOptionRule {
+        +String id
+        +String attribute
+        +RuleOperator operator
+        +JSON value
+    }
+
+    class Fulfillment {
+        +String id
+        +String location_id
+        +DateTime packed_at
+        +DateTime shipped_at
+        +String marked_shipped_by
+        +String created_by
+        +DateTime delivered_at
+        +DateTime canceled_at
+        +JSON data
+        +Boolean requires_shipping
+        +JSON metadata
+        +DateTime deleted_at
+    }
+
+    class FulfillmentItem {
+        +String id
+        +String title
+        +String sku
+        +String barcode
+        +BigNumber quantity
+        +String line_item_id
+        +String inventory_item_id
+        +DateTime deleted_at
+    }
+
+    class FulfillmentLabel {
+        +String id
+        +String tracking_number
+        +String tracking_url
+        +String label_url
+        +DateTime deleted_at
+    }
+
+    class FulfillmentAddress {
+        +String id
+        +String first_name
+        +String last_name
+        +String address_1
+        +String address_2
+        +String city
+        +String country_code
+        +String province
+        +String postal_code
+        +String phone
+        +JSON metadata
+        +DateTime deleted_at
+    }
+
+    FulfillmentSet "1" --> "0..*" ServiceZone : service_zones
+    ServiceZone "1" --> "0..*" GeoZone : geo_zones
+    ServiceZone "1" --> "0..*" ShippingOption : shipping_options
+    ShippingOption "0..1" --> "1" ShippingOptionType : type
+    ShippingOption "0..1" --> "0..1" ShippingProfile : shipping_profile
+    ShippingOption "0..1" --> "0..1" FulfillmentProvider : provider
+    ShippingOption "1" --> "0..*" ShippingOptionRule : rules
+    ShippingOption "1" --> "0..*" Fulfillment : fulfillments
+    Fulfillment "1" --> "0..*" FulfillmentItem : items
+    Fulfillment "1" --> "0..*" FulfillmentLabel : labels
+    Fulfillment "1" --> "0..1" FulfillmentAddress : delivery_address
+    Fulfillment "0..1" --> "0..1" FulfillmentProvider : provider

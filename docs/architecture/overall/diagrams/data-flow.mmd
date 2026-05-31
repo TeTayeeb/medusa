@@ -1,0 +1,86 @@
+sequenceDiagram
+    autonumber
+
+    participant Client      as 🌐 Client<br/>(Browser / Mobile / API)
+    participant Nginx        as 🔀 Nginx<br/>(reverse proxy)
+    participant Express      as ⚡ Express Router<br/>(packages/medusa/src/api)
+    participant Middleware   as 🔒 Middleware Pipeline<br/>(auth · cors · logger)
+    participant Validator    as ✅ Zod Validator<br/>(request schema)
+    participant RouteHandler as 📌 Route Handler<br/>(GET/POST/PATCH/DELETE)
+    participant Workflow     as 🔄 Workflow Engine<br/>(createWorkflow.run())
+    participant Step         as 📐 Workflow Step<br/>(createStep)
+    participant DIContainer  as 🧩 DI Container<br/>(Awilix)
+    participant ModSvc       as 🏪 Module Service<br/>(e.g. OrderModuleService)
+    participant ORM          as 🗄 MikroORM<br/>(EntityManager)
+    participant PG           as 🗄 PostgreSQL
+    participant EventBus     as 📡 Event Bus<br/>(Redis pub/sub)
+    participant Subscriber   as 🔔 Event Subscriber<br/>(side-effects)
+
+    Note over Client, Nginx: ── Ingress ────────────────────────────────
+    Client->>+Nginx: HTTP Request<br/>POST /admin/orders/:id/fulfillments
+    Nginx->>+Express: Proxy (stripped TLS)
+
+    Note over Express, Validator: ── Middleware Pipeline ────────────────────
+    Express->>+Middleware: Route match<br/>Apply middleware stack
+    Middleware->>Middleware: 1. CORS check
+    Middleware->>Middleware: 2. JWT / Session auth
+    Middleware->>Middleware: 3. Request logger
+    Middleware->>+Validator: 4. Validate body against Zod schema
+    Validator-->>-Middleware: ✓ Validated & typed body
+    Middleware-->>-Express: ✓ req enriched<br/>(req.auth, req.validatedBody)
+
+    Note over Express, RouteHandler: ── Route Dispatch ─────────────────────────
+    Express->>+RouteHandler: Dispatch to named export<br/>POST handler(req, res)
+    RouteHandler->>RouteHandler: Extract params from req<br/>(req.params, req.body, req.auth)
+
+    Note over RouteHandler, Workflow: ── Workflow Orchestration ──────────────────
+    RouteHandler->>+Workflow: createFulfillmentWorkflow(req.scope)<br/>.run({ input })
+    Workflow->>Workflow: Instantiate WorkflowRunner<br/>Build step DAG
+
+    Note over Workflow, DIContainer: ── Step Execution ──────────────────────────
+    loop For each step in DAG (sequential or parallel)
+        Workflow->>+Step: Execute step(input, context)
+        Step->>+DIContainer: container.resolve(Modules.ORDER)
+        DIContainer-->>-Step: OrderModuleService instance
+
+        Note over Step, PG: ── Module → DB ────────────────────────────
+        Step->>+ModSvc: service.createFulfillment(data, sharedContext)
+        ModSvc->>ModSvc: @InjectTransactionManager()<br/>begin transaction
+        ModSvc->>+ORM: em.create(Fulfillment, data)<br/>em.flush()
+        ORM->>+PG: BEGIN; INSERT INTO fulfillment …; COMMIT;
+        PG-->>-ORM: ✓ rows inserted
+        ORM-->>-ModSvc: Fulfillment entity
+
+        Note over ModSvc, Subscriber: ── Domain Events ──────────────────────────
+        ModSvc->>ModSvc: @EmitEvents() collect events
+        ModSvc-->>-Step: FulfillmentDTO
+
+        Step->>+EventBus: eventBus.emit("fulfillment.created", payload)
+        EventBus->>+Subscriber: publish to Redis channel<br/>fan-out to all subscribers
+        Subscriber->>Subscriber: async side-effects:<br/>• send shipping notification<br/>• update inventory<br/>• trigger 3rd-party webhook
+        Subscriber-->>-EventBus: ack
+        EventBus-->>-Step: ✓ event queued
+
+        Step-->>-Workflow: StepResponse(result, compensationData)
+    end
+
+    Note over Workflow, RouteHandler: ── Hooks & Response ──────────────────────
+    Workflow->>Workflow: All steps succeeded<br/>Emit lifecycle hooks (createHook)
+    Workflow->>Workflow: WorkflowResponse(result)
+    Workflow-->>-RouteHandler: ✓ result
+
+    RouteHandler->>RouteHandler: Shape response body<br/>{ id, object, … }
+    RouteHandler-->>-Express: res.status(200).json(body)
+    Express-->>-Nginx: HTTP 200 + JSON
+    Nginx-->>-Client: HTTP 200 + JSON
+
+    Note over Workflow: ── Compensation (on failure) ──────────────────
+    rect rgb(255, 237, 213)
+        Workflow->>Workflow: ⚠ Step N throws error
+        loop Reverse-order compensation
+            Workflow->>Step: compensate(compensationData)
+            Step->>ModSvc: service.softDelete / rollback
+        end
+        Workflow-->>RouteHandler: throws MedusaError
+        RouteHandler-->>Client: HTTP 4xx / 5xx + error JSON
+    end

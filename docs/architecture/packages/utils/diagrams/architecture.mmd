@@ -1,0 +1,146 @@
+---
+title: "@medusajs/framework/utils — Architecture"
+---
+classDiagram
+    direction TB
+
+    namespace ServiceFactory {
+        class MedusaService {
+            <<factory function>>
+            +MedusaService(models) AbstractServiceClass
+        }
+
+        class MedusaInternalService {
+            <<base>>
+            -repository: EntityRepository
+            +list(filters, options, ctx) T[]
+            +listAndCount(filters, options, ctx)
+            +retrieve(id, options, ctx) T
+            +create(data[], ctx) T[]
+            +update(data[], ctx) T[]
+            +delete(ids[], ctx) void
+            +softDelete(ids[], ctx) void
+            +restore(ids[], ctx) void
+        }
+
+        class GeneratedModuleService {
+            <<abstract generated>>
+            +list{Entity}(filters, config, ctx) DTO[]
+            +retrieve{Entity}(id, config, ctx) DTO
+            +create{Entities}(data[], ctx) DTO[]
+            +update{Entities}(data[], ctx) DTO[]
+            +delete{Entities}(ids[], ctx) void
+            +softDelete{Entities}(ids[], ctx) void
+            +restore{Entities}(ids[], ctx) void
+        }
+    }
+
+    namespace Decorators {
+        class InjectManager {
+            <<decorator>>
+            Creates or reuses read-only EntityManager
+            Injects into sharedContext.manager
+        }
+
+        class InjectTransactionManager {
+            <<decorator>>
+            Wraps method in DB transaction
+            Joins existing if present
+            Rolls back on error
+        }
+
+        class MedusaContext {
+            <<parameter decorator>>
+            Marks last parameter as context receiver
+            Injects sharedContext automatically
+        }
+
+        class EmitEvents {
+            <<decorator>>
+            Collects domain events during method
+            Flushes to EventBus after commit
+            Discards on rollback
+        }
+    }
+
+    namespace ErrorHandling {
+        class MedusaError {
+            +type: MedusaErrorTypes
+            +message: string
+            +MedusaError(type, message)
+        }
+
+        class MedusaErrorTypes {
+            <<enum>>
+            NOT_FOUND
+            INVALID_DATA
+            NOT_ALLOWED
+            CONFLICT
+            UNEXPECTED_STATE
+            INVALID_ARGUMENT
+            DB_ERROR
+        }
+    }
+
+    namespace Utilities {
+        class IdGenerator {
+            <<utility>>
+            +generateEntityId(existing?, prefix) string
+            NanoID 26 chars, URL-safe alphabet
+            Format: prefix_nanoid26
+        }
+
+        class InputValidators {
+            <<utility>>
+            +validateEmail(value) void
+            +validateUrl(value) void
+            Throws MedusaError.INVALID_DATA
+        }
+
+        class ModulesEnum {
+            <<enum>>
+            PRODUCT
+            ORDER
+            CART
+            PAYMENT
+            INVENTORY
+            PRICING
+            PROMOTION
+            CUSTOMER
+            FULFILLMENT
+            REGION
+        }
+
+        class ContainerRegistrationKeys {
+            <<const>>
+            QUERY
+            LOGGER
+            CONFIG_MODULE
+            FEATURE_FLAGS
+            MANAGER
+            REMOTE_LINK
+        }
+
+        class BuildQuery {
+            <<utility>>
+            +buildQuery(filters, FindConfig) FindOptions
+            Translates FindConfig to MikroORM FindOptions
+        }
+    }
+
+    MedusaService ..> MedusaInternalService : delegates to
+    MedusaService ..> GeneratedModuleService : returns abstract class
+    GeneratedModuleService --> MedusaInternalService : uses
+
+    InjectTransactionManager ..> InjectManager : applied after
+    EmitEvents ..> InjectTransactionManager : applied inside
+
+    MedusaError *-- MedusaErrorTypes : uses type
+    InputValidators ..> MedusaError : throws
+
+    BuildQuery ..> GeneratedModuleService : used by
+
+    note for MedusaService "Factory: MedusaService({ Product, Variant })\nreturns abstract class with typed\nCRUD methods for each entity"
+    note for InjectTransactionManager "Applied to protected write methods.\nJoins existing transaction via\nsharedContext.transactionManager"
+    note for EmitEvents "Domain events are buffered during\nmethod execution, flushed only\nafter successful DB commit"
+    note for IdGenerator "generateEntityId(undefined, 'prod')\n→ 'prod_01HX7KBCXYZ...'\nExisting ID passed through unchanged"

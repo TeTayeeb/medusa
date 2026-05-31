@@ -1,0 +1,132 @@
+@startuml NotificationModule
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classBorderColor #333333
+skinparam classBackgroundColor #FAFAFA
+skinparam arrowColor #555555
+skinparam noteBackgroundColor #FFFFF0
+skinparam noteBorderColor #AAAAAA
+
+title Notification Module — Class Diagram\nMedusa v2.15.4
+
+entity Notification {
+    + id : String <<PK, ULID>>
+    --
+    to : String
+    channel : String
+    template : String
+    data : JSON
+    trigger_type : String
+    resource_id : String
+    resource_type : String
+    receiver_id : String
+    provider_id : String <<FK: NotificationProvider.id>>
+    status : String
+    external_id : String
+    created_at : Timestamp
+    updated_at : Timestamp
+    deleted_at : Timestamp
+}
+
+entity NotificationProvider {
+    + id : String <<PK>>
+    --
+    handle : String
+    name : String
+    is_enabled : Boolean
+    channels : String[]
+    created_at : Timestamp
+    updated_at : Timestamp
+    deleted_at : Timestamp
+}
+
+interface INotificationProvider {
+    + {static} identifier : String
+    + {static} channels : String[]
+    + send(notification : NotificationDTO) : Object ~id~
+}
+
+interface INotificationModuleService {
+    + createNotifications(data, ctx) : NotificationDTO | NotificationDTO[]
+    + updateNotifications(data, ctx) : NotificationDTO[]
+    + listNotifications(filters, config, ctx) : NotificationDTO[]
+    + retrieveNotification(id, config, ctx) : NotificationDTO
+}
+
+class NotificationModuleService {
+    - notificationRepository : Repository<Notification>
+    - providerRegistry : Map<String, INotificationProvider>
+    + createNotifications(data, ctx) : NotificationDTO | NotificationDTO[]
+    + updateNotifications(data, ctx) : NotificationDTO[]
+    + listNotifications(filters, config, ctx) : NotificationDTO[]
+    + resolveProvider(channel) : INotificationProvider
+}
+
+class NotificationDTO {
+    + id : String
+    + to : String
+    + channel : String
+    + template : String
+    + data : JSON
+    + trigger_type : String
+    + resource_id : String
+    + resource_type : String
+    + receiver_id : String
+    + provider_id : String
+    + status : String
+    + external_id : String
+}
+
+class LocalNotificationProvider {
+    + {static} identifier : String = "local"
+    + {static} channels : String[] = ["email"]
+    + send(notification) : Object
+}
+
+class SendGridNotificationProvider {
+    + {static} identifier : String = "sendgrid"
+    + {static} channels : String[] = ["email"]
+    - api_key : String
+    - from : String
+    + send(notification) : Object
+}
+
+Notification "0..*" --> "0..1" NotificationProvider : dispatched via
+
+INotificationProvider <|.. LocalNotificationProvider : implements
+INotificationProvider <|.. SendGridNotificationProvider : implements
+NotificationProvider ..|> INotificationProvider : registered as
+
+INotificationModuleService <|.. NotificationModuleService : implements
+NotificationModuleService --> Notification : manages
+NotificationModuleService --> INotificationProvider : resolves & calls
+Notification ..> NotificationDTO : serializes to
+
+note top of Notification
+  Modules.NOTIFICATION
+  status: "pending" | "sent" | "failed"
+  external_id: provider's message reference ID.
+  Persisted before dispatch — audit trail guaranteed.
+end note
+
+note right of NotificationProvider
+  channels: ["email"], ["sms"], ["email","push"]
+  is_enabled: false prevents resolution for dispatch.
+  id matches INotificationProvider.identifier.
+end note
+
+note bottom of INotificationProvider
+  Custom providers implement this interface.
+  Registered via medusa-config.ts:
+    modules: [{ resolve: "@medusajs/notification",
+      options: { providers: [...] } }]
+end note
+
+note left of NotificationModuleService
+  resolveProvider(channel):
+    finds first enabled provider
+    that declares the channel.
+  Throws NOT_FOUND if no match.
+end note
+
+@enduml

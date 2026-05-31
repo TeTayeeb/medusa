@@ -1,0 +1,201 @@
+@startuml Order Module — Class Diagram
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+package "Order Module" {
+
+  class Order {
+    + id : String <<PK>>
+    + display_id : Integer <<autoincrement>>
+    + custom_display_id : String <<unique>>
+    + region_id : String
+    + customer_id : String
+    + sales_channel_id : String
+    + status : OrderStatus
+    + is_draft_order : Boolean
+    + email : String
+    + currency_code : String
+    + version : Integer
+    + no_notification : Boolean
+    + canceled_at : DateTime
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  class OrderItem {
+    + id : String <<PK>>
+    + title : String
+    + variant_id : String
+    + product_id : String
+    + quantity : Integer
+    + fulfilled_quantity : Integer
+    + returned_quantity : Integer
+    + shipped_quantity : Integer
+    + unit_price : BigNumber
+    + compare_at_unit_price : BigNumber
+    + metadata : JSON
+  }
+
+  class OrderLineItem {
+    + id : String <<PK>>
+    + title : String
+    + subtitle : String
+    + thumbnail : String
+    + variant_id : String
+    + product_id : String
+    + product_title : String
+    + variant_title : String
+    + variant_sku : String
+    + is_discountable : Boolean
+    + is_tax_inclusive : Boolean
+    + compare_at_unit_price : BigNumber
+    + unit_price : BigNumber
+    + quantity : Integer
+    + metadata : JSON
+  }
+
+  class OrderShippingMethod {
+    + id : String <<PK>>
+    + name : String
+    + shipping_option_id : String
+    + amount : BigNumber
+    + is_tax_inclusive : Boolean
+    + data : JSON
+    + metadata : JSON
+  }
+
+  class OrderTransaction {
+    + id : String <<PK>>
+    + amount : BigNumber
+    + currency_code : String
+    + reference : String
+    + reference_id : String
+    + created_at : DateTime
+  }
+
+  class OrderChange {
+    + id : String <<PK>>
+    + version : Integer
+    + status : OrderChangeStatus
+    + requested_by : String
+    + confirmed_at : DateTime
+    + declined_at : DateTime
+    + canceled_at : DateTime
+    + note : String
+  }
+
+  class OrderChangeAction {
+    + id : String <<PK>>
+    + action : ChangeActionType
+    + details : JSON
+    + amount : BigNumber
+    + applied : Boolean
+    + internal_note : String
+  }
+
+  class Return {
+    + id : String <<PK>>
+    + status : ReturnStatus
+    + refund_amount : BigNumber
+    + location_id : String
+    + no_notification : Boolean
+    + received_at : DateTime
+    + canceled_at : DateTime
+    + created_at : DateTime
+    + updated_at : DateTime
+  }
+
+  class ReturnItem {
+    + id : String <<PK>>
+    + quantity : Integer
+    + received_quantity : Integer
+    + damaged_quantity : Integer
+    + note : String
+  }
+
+  class ReturnReason {
+    + id : String <<PK>>
+    + value : String <<unique>>
+    + label : String
+    + description : String
+    + parent_return_reason_id : String <<FK>>
+  }
+
+  class OrderSummary {
+    + id : String <<PK>>
+    + version : Integer
+    + totals : JSON
+  }
+
+  class OrderAddress {
+    + id : String <<PK>>
+    + first_name : String
+    + last_name : String
+    + company : String
+    + address_1 : String
+    + address_2 : String
+    + city : String
+    + country_code : String
+    + province : String
+    + postal_code : String
+    + phone : String
+    + metadata : JSON
+  }
+
+  class OrderClaim {
+    + id : String <<PK>>
+    + type : ClaimType
+    + claim_status : ClaimStatus
+    + no_notification : Boolean
+    + refund_amount : BigNumber
+  }
+
+  class OrderExchange {
+    + id : String <<PK>>
+    + exchange_status : ExchangeStatus
+    + no_notification : Boolean
+    + allow_backorder : Boolean
+    + difference_due : BigNumber
+  }
+
+  enum OrderStatus {
+    PENDING
+    PROCESSING
+    SHIPPED
+    DELIVERED
+    CANCELLED
+    RETURNED
+    REQUIRES_ACTION
+    ARCHIVED
+  }
+
+  enum OrderChangeStatus {
+    PENDING
+    CONFIRMED
+    DECLINED
+    CANCELED
+  }
+
+  Order "1" *-- "0..*" OrderItem : items
+  Order "1" *-- "0..*" OrderShippingMethod : shipping_methods
+  Order "1" *-- "0..*" OrderTransaction : transactions
+  Order "1" *-- "0..*" OrderSummary : summary
+  Order "1" *-- "0..*" Return : returns
+  Order "1" *-- "0..*" OrderChange : changes
+  Order "1" *-- "0..*" OrderClaim : claims
+  Order "1" *-- "0..*" OrderExchange : exchanges
+  Order "0..1" --> "1" OrderAddress : shipping_address
+  Order "0..1" --> "1" OrderAddress : billing_address
+  OrderItem --> OrderLineItem : references
+  OrderChange "1" *-- "0..*" OrderChangeAction : actions
+  Return "1" *-- "0..*" ReturnItem : items
+  ReturnItem --> ReturnReason : reason
+  ReturnReason "0..1" --> "0..*" ReturnReason : children
+  Order --> OrderStatus : status
+  OrderChange --> OrderChangeStatus : status
+}
+
+@enduml

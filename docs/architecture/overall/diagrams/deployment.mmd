@@ -1,0 +1,110 @@
+graph TB
+    %% ── Docker Network ────────────────────────────────────────────────────────
+    subgraph DockerNetwork["🐳 Docker Network — medusa-network (bridge)"]
+
+        %% ── medusa-backend ───────────────────────────────────────────────────
+        subgraph MedusaContainer["Container: medusa-backend"]
+            NodeRuntime["🟢 Node.js 20 (LTS)\nProcess: medusa start"]
+            subgraph APIProcess["API Server Process (port 9000)"]
+                Express["Express HTTP Server\n:9000"]
+                DIContainer["Awilix DI Container"]
+                ModulesLoaded["Commerce Modules\n(loaded at boot)"]
+                MikroORM_inst["MikroORM instance\n(EntityManager pool)"]
+                EventBusInst["Event Bus client\n(ioredis)"]
+                CacheInst["Cache client\n(ioredis)"]
+            end
+            VolMount1[/"📁 ./uploads\n(mounted volume)"/]
+            VolMount2[/"📁 ./medusa-config.ts\n(mounted config)"/]
+        end
+
+        %% ── worker (optional) ────────────────────────────────────────────────
+        subgraph WorkerContainer["Container: medusa-worker  (optional)"]
+            WorkerNode["🟢 Node.js 20 (LTS)\nProcess: medusa worker"]
+            subgraph WorkerProcess["Background Worker Process"]
+                BullWorker["BullMQ Worker\n(job consumer)"]
+                SubscriberWorker["Event Subscribers\n(async handlers)"]
+                ScheduledJobs["Scheduled Jobs\n(cron-like tasks)"]
+            end
+        end
+
+        %% ── postgres ─────────────────────────────────────────────────────────
+        subgraph PostgresContainer["Container: postgres"]
+            PGService["🗄 PostgreSQL 15\nport 5432"]
+            PGVol[/"📁 postgres-data\n(named volume — persisted)"/]
+            PGService --- PGVol
+        end
+
+        %% ── redis ────────────────────────────────────────────────────────────
+        subgraph RedisContainer["Container: redis"]
+            RedisService["⚡ Redis 7\nport 6379"]
+            RedisVol[/"📁 redis-data\n(named volume — persisted)"/]
+            RedisAOF["AOF persistence\n(appendonly yes)"]
+            RedisService --- RedisVol
+            RedisService --- RedisAOF
+        end
+
+        %% ── nginx (optional reverse proxy) ───────────────────────────────────
+        subgraph NginxContainer["Container: nginx  (optional reverse proxy)"]
+            NginxService["🔀 Nginx\nport 80 / 443"]
+            TLSTermination["TLS Termination\n(Let's Encrypt / cert)"]
+            NginxService --- TLSTermination
+        end
+
+    end
+
+    %% ── External / cloud ─────────────────────────────────────────────────────
+    subgraph ExternalCloud["☁ External Cloud Services"]
+        S3["📦 S3 / Object Storage\n(AWS S3 · MinIO · R2)"]
+        SMTP["📧 Email Provider\n(SendGrid · Resend · SMTP)"]
+        PayGW["💳 Payment Gateway\n(Stripe · PayPal)"]
+    end
+
+    subgraph ClientLayer["👥 Clients"]
+        AdminBrowser["🖥 Admin Browser\n(Admin Dashboard SPA)"]
+        SFBrowser["🛒 Customer Browser\n(Storefront / Next.js)"]
+        APIConsumer["⚡ API Consumer\n(mobile / 3rd-party)"]
+    end
+
+    %% ── Network connections ───────────────────────────────────────────────────
+    AdminBrowser  -->|"HTTPS :443"| NginxService
+    SFBrowser     -->|"HTTPS :443"| NginxService
+    APIConsumer   -->|"HTTPS :443"| NginxService
+
+    NginxService  -->|"HTTP proxy :9000"| Express
+
+    Express       --> DIContainer
+    DIContainer   --> MikroORM_inst
+    DIContainer   --> EventBusInst
+    DIContainer   --> CacheInst
+
+    MikroORM_inst -->|"TCP 5432"| PGService
+    EventBusInst  -->|"TCP 6379"| RedisService
+    CacheInst     -->|"TCP 6379"| RedisService
+
+    BullWorker    -->|"TCP 6379 (BullMQ)"| RedisService
+    SubscriberWorker -->|"TCP 6379 (sub)"| RedisService
+
+    ModulesLoaded -->|"HTTPS"| S3
+    ModulesLoaded -->|"HTTPS"| SMTP
+    ModulesLoaded -->|"HTTPS"| PayGW
+
+    VolMount1     -.->|"bind mount"| NodeRuntime
+    VolMount2     -.->|"bind mount"| NodeRuntime
+
+    %% ── Styling ───────────────────────────────────────────────────────────────
+    classDef container  fill:#dbeafe,stroke:#2563eb,color:#1e3a5f
+    classDef db         fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef cache      fill:#fef3c7,stroke:#d97706,color:#451a03
+    classDef proxy      fill:#f3e8ff,stroke:#9333ea,color:#2e1065
+    classDef external   fill:#f1f5f9,stroke:#64748b,color:#374151
+    classDef client     fill:#fff7ed,stroke:#ea580c,color:#431407
+    classDef volume     fill:#fafafa,stroke:#d1d5db,color:#6b7280
+
+    class NodeRuntime,Express,DIContainer,ModulesLoaded,MikroORM_inst,EventBusInst,CacheInst container
+    class WorkerNode,BullWorker,SubscriberWorker,ScheduledJobs container
+    class PGService db
+    class RedisService,RedisAOF cache
+    class NginxService,TLSTermination proxy
+    class S3,SMTP,PayGW external
+    class AdminBrowser,SFBrowser,APIConsumer client
+    class VolMount1,VolMount2,PGVol,RedisVol volume

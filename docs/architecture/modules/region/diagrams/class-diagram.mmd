@@ -1,0 +1,78 @@
+classDiagram
+    direction TB
+
+    class Region {
+        +String id
+        +String name
+        +String currency_code
+        +Boolean automatic_taxes
+        +Float tax_rate
+        +String tax_code
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class RegionCountry {
+        +String id
+        +String iso_2
+        +String iso_3
+        +String num_code
+        +String name
+        +String display_name
+        +String region_id
+        +Date created_at
+        +Date updated_at
+    }
+
+    class IRegionModuleService {
+        <<interface>>
+        +createRegions(data, ctx) RegionDTO[]
+        +updateRegions(data, ctx) RegionDTO[]
+        +deleteRegions(ids, ctx) void
+        +retrieveRegion(id, config, ctx) RegionDTO
+        +listRegions(filters, config, ctx) RegionDTO[]
+        +listAndCountRegions(filters, config, ctx) RegionDTO[]~number~
+        +upsertRegionCountries(data, ctx) RegionCountryDTO[]
+        +deleteRegionCountries(ids, ctx) void
+    }
+
+    class RegionDTO {
+        <<interface>>
+        +String id
+        +String name
+        +String currency_code
+        +Boolean automatic_taxes
+        +Float tax_rate
+        +String tax_code
+        +RegionCountryDTO[] countries
+    }
+
+    class RegionCountryDTO {
+        <<interface>>
+        +String id
+        +String iso_2
+        +String iso_3
+        +String num_code
+        +String name
+        +String display_name
+        +String region_id
+    }
+
+    class Currency {
+        <<external>>
+        +String code
+        +String name
+        +String symbol
+        +int decimal_digits
+    }
+
+    Region "1" --> "0..*" RegionCountry : has countries
+    Region ..|> RegionDTO : serializes to
+    RegionCountry ..|> RegionCountryDTO : serializes to
+    IRegionModuleService ..> Region : manages
+    Region ..> Currency : references via currency_code
+
+    note for Region "Modules.REGION\nSoft-deletable. Cart stores region_id."
+    note for RegionCountry "iso_2 has unique constraint.\nA country belongs to one region only."
+    note for Currency "External module.\nOnly currency_code string stored in Region."

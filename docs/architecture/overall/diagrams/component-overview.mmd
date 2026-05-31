@@ -1,0 +1,130 @@
+graph TB
+    %% ── Layer 1: Clients ──────────────────────────────────────────────────────
+    subgraph L1["Layer 1 — Clients"]
+        direction LR
+        AdminUI["🖥 Admin Dashboard\n(React SPA / Vite)"]
+        SF["🛒 Storefront\n(Next.js)"]
+        ExtClient["⚡ External Clients\n(Mobile, 3rd-party, CLI)"]
+    end
+
+    %% ── Layer 2: API ─────────────────────────────────────────────────────────
+    subgraph L2["Layer 2 — API Layer  (Express · /packages/medusa/src/api)"]
+        direction LR
+        AdminRoutes["Admin Routes\n/admin/*\n(auth-protected)"]
+        StoreRoutes["Store Routes\n/store/*\n(public + session)"]
+        CustomRoutes["Custom Routes\n/custom/*\n(merchant extensions)"]
+        Middlewares["Middleware Pipeline\n(auth · cors · zod-validate · logger)"]
+    end
+
+    %% ── Layer 3: Workflow Engine ──────────────────────────────────────────────
+    subgraph L3["Layer 3 — Workflow Engine  (@medusajs/workflows-sdk)"]
+        direction LR
+        WFRunner["WorkflowRunner\n(createWorkflow)"]
+        Steps["Typed Steps\n(createStep)"]
+        Compensation["Compensation / Rollback\n(reverse-order on failure)"]
+        Hooks["Lifecycle Hooks\n(createHook · emit events)"]
+        Parallel["Parallel Steps\n(parallelize())"]
+    end
+
+    %% ── Layer 4: Commerce Modules ─────────────────────────────────────────────
+    subgraph L4["Layer 4 — Commerce Modules  (@medusajs/modules)"]
+        direction LR
+        subgraph CoreModules["Core Commerce"]
+            Product["Product"]
+            Order["Order"]
+            Cart["Cart"]
+            Payment["Payment"]
+            Customer["Customer"]
+        end
+        subgraph PricingModules["Pricing & Promotions"]
+            Pricing["Pricing"]
+            Promotion["Promotion"]
+            Region["Region"]
+            Currency["Currency"]
+        end
+        subgraph FulfillmentModules["Fulfillment & Inventory"]
+            Fulfillment["Fulfillment"]
+            Inventory["Inventory"]
+            StockLocation["Stock Location"]
+        end
+        subgraph AuthModules["Identity & Auth"]
+            Auth["Auth"]
+            User["User"]
+            SalesChannel["Sales Channel"]
+        end
+        subgraph FileNotification["File & Notifications"]
+            FileModule["File"]
+            Notification["Notification"]
+            Workflow_module["Workflow\n(persistence)"]
+        end
+    end
+
+    %% ── Layer 5: Framework ───────────────────────────────────────────────────
+    subgraph L5["Layer 5 — Framework  (@medusajs/framework)"]
+        direction LR
+        DI["DI Container\n(Awilix)"]
+        HTTP["HTTP Server\n(Express)"]
+        ORM["ORM Layer\n(MikroORM 6)"]
+        EventBus["Event Bus\n(Redis or In-Process)"]
+        Cache["Cache Manager\n(Redis / In-Memory)"]
+        Jobs["Job Scheduler\n(Background workers)"]
+        Logger["Logger\n(Winston)"]
+    end
+
+    %% ── Layer 6: Infrastructure ───────────────────────────────────────────────
+    subgraph L6["Layer 6 — Infrastructure"]
+        direction LR
+        PG[("🗄 PostgreSQL 15\n(primary data store)")]
+        RD[("⚡ Redis 7\n(cache + events)")]
+        FS[("📦 File Storage\n(S3 / MinIO)")]
+    end
+
+    %% ── Vertical flow ─────────────────────────────────────────────────────────
+    AdminUI     --> AdminRoutes
+    SF          --> StoreRoutes
+    ExtClient   --> CustomRoutes
+    AdminRoutes --> Middlewares
+    StoreRoutes --> Middlewares
+    CustomRoutes --> Middlewares
+
+    Middlewares --> WFRunner
+    WFRunner    --> Steps
+    Steps       --> Compensation
+    Steps       --> Hooks
+    Steps       --> Parallel
+
+    Steps       --> CoreModules
+    Steps       --> PricingModules
+    Steps       --> FulfillmentModules
+    Steps       --> AuthModules
+    Steps       --> FileNotification
+
+    CoreModules        --> DI
+    PricingModules     --> DI
+    FulfillmentModules --> DI
+    AuthModules        --> DI
+    FileNotification   --> DI
+
+    DI        --> ORM
+    DI        --> EventBus
+    DI        --> Cache
+    ORM       --> PG
+    EventBus  --> RD
+    Cache     --> RD
+    Jobs      --> RD
+    FileModule --> FS
+
+    %% ── Styling ───────────────────────────────────────────────────────────────
+    classDef layer1   fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    classDef layer2   fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    classDef layer3   fill:#fef3c7,stroke:#d97706,color:#451a03
+    classDef layer4   fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef layer5   fill:#ffedd5,stroke:#ea580c,color:#431407
+    classDef infra    fill:#f1f5f9,stroke:#64748b,color:#0f172a
+
+    class AdminUI,SF,ExtClient layer1
+    class AdminRoutes,StoreRoutes,CustomRoutes,Middlewares layer2
+    class WFRunner,Steps,Compensation,Hooks,Parallel layer3
+    class Product,Order,Cart,Payment,Customer,Pricing,Promotion,Region,Currency,Fulfillment,Inventory,StockLocation,Auth,User,SalesChannel,FileModule,Notification,Workflow_module layer4
+    class DI,HTTP,ORM,EventBus,Cache,Jobs,Logger layer5
+    class PG,RD,FS infra

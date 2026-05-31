@@ -1,0 +1,51 @@
+sequenceDiagram
+    actor Customer
+    participant CartModule as Cart Module
+    participant PromotionWorkflow as computeActionsWorkflow
+    participant PromotionService as IPromotionModuleService
+    participant RuleEngine as Rule Engine
+    participant DB as PostgreSQL
+
+    Customer->>CartModule: Apply coupon code "SUMMER20"
+    CartModule->>PromotionWorkflow: computeActionsWorkflow({ codes: ["SUMMER20"], cart })
+
+    PromotionWorkflow->>PromotionService: computeActions(["SUMMER20"], cartSnapshot)
+
+    PromotionService->>DB: SELECT promotions WHERE code IN (...) OR is_automatic = true
+    DB-->>PromotionService: [Promotion(SUMMER20), Promotion(AUTO_WELCOME)]
+
+    loop For each Promotion
+        PromotionService->>DB: SELECT campaign with budget
+        DB-->>PromotionService: Campaign + CampaignBudget
+
+        PromotionService->>RuleEngine: evaluate campaign date range
+        RuleEngine-->>PromotionService: PASS (within date range)
+
+        PromotionService->>DB: SELECT promotion_rules + values
+        DB-->>PromotionService: PromotionRule(customer_group IN [vip])
+
+        PromotionService->>RuleEngine: evaluate promotion rules against cart
+        RuleEngine-->>PromotionService: PASS (customer is VIP)
+
+        PromotionService->>DB: SELECT application_method + target_rules + buy_rules
+        DB-->>PromotionService: ApplicationMethod(percentage, items, each, value:20)
+
+        PromotionService->>RuleEngine: evaluate target_rules against cart items
+        RuleEngine-->>PromotionService: Filtered items: [shirt, jeans]
+
+        PromotionService->>PromotionService: calculate discount amount\n(20% of filtered items = $12.00)
+    end
+
+    PromotionService-->>PromotionWorkflow: [addItemAdjustment(shirt, $6), addItemAdjustment(jeans, $6)]
+    PromotionWorkflow-->>CartModule: DiscountActions[]
+
+    CartModule->>CartModule: Apply adjustments to line items
+    CartModule-->>Customer: Updated cart total (with discounts)
+
+    Note over Customer, DB: After Order Placement
+    CartModule->>PromotionWorkflow: registerUsageWorkflow({ actions })
+    PromotionWorkflow->>PromotionService: registerUsage(actions)
+    PromotionService->>DB: UPDATE promotion SET used = used + 1
+    PromotionService->>DB: UPDATE campaign_budget SET used = used + 1200
+    DB-->>PromotionService: OK
+    PromotionService-->>PromotionWorkflow: void

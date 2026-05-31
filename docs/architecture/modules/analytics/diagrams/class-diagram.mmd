@@ -1,0 +1,80 @@
+---
+title: Analytics Module — Class Diagram
+---
+classDiagram
+    direction TB
+
+    class AnalyticsModuleService {
+        -provider: IAnalyticsProvider
+        -settingsService: ISettingsModuleService
+        -currentUserId: string
+        -anonId: string
+        +track(event: string, properties?: object) Promise~void~
+        +page(name: string, properties?: object) Promise~void~
+        +identify(anonymousId: string, traits?: object) Promise~void~
+        +optOut() Promise~void~
+        -isOptedOut() Promise~boolean~
+        -resolveAnonymousId(userId: string) string
+    }
+
+    class IAnalyticsProvider {
+        <<interface>>
+        +track(event: string, properties?: object) Promise~void~
+        +page(name: string, properties?: object) Promise~void~
+        +identify(anonymousId: string, traits?: object) Promise~void~
+        +optOut() Promise~void~
+    }
+
+    class LocalAnalyticsProvider {
+        +track(event: string, properties?: object) Promise~void~
+        +page(name: string, properties?: object) Promise~void~
+        +identify(anonymousId: string, traits?: object) Promise~void~
+        +optOut() Promise~void~
+    }
+
+    class PostHogAnalyticsProvider {
+        -client: PostHog
+        -buffer: AnalyticsEvent[]
+        -flushInterval: number
+        -flushAt: number
+        -timer: NodeJS.Timeout
+        +track(event: string, properties?: object) Promise~void~
+        +page(name: string, properties?: object) Promise~void~
+        +identify(anonymousId: string, traits?: object) Promise~void~
+        +optOut() Promise~void~
+        -flush() Promise~void~
+        +onApplicationBootstrap() void
+        +onApplicationShutdown() Promise~void~
+    }
+
+    class AnalyticsEvent {
+        +event: string
+        +anonymousId: string
+        +timestamp: string
+        +properties: Record~string, unknown~
+    }
+
+    class ISettingsModuleService {
+        <<interface>>
+        +get(key: string, options: object) Promise~unknown~
+        +set(key: string, value: unknown, options: object) Promise~void~
+    }
+
+    class AnalyticsModuleOptions {
+        +provider: string
+        +posthog_api_key: string
+        +opt_out: boolean
+        +flush_interval: number
+        +flush_at: number
+    }
+
+    AnalyticsModuleService --> IAnalyticsProvider : delegates to
+    AnalyticsModuleService --> ISettingsModuleService : checks opt-out via
+    AnalyticsModuleService ..> AnalyticsEvent : creates
+
+    IAnalyticsProvider <|.. LocalAnalyticsProvider : implements
+    IAnalyticsProvider <|.. PostHogAnalyticsProvider : implements
+
+    PostHogAnalyticsProvider ..> AnalyticsEvent : buffers
+
+    AnalyticsModuleService ..> AnalyticsModuleOptions : configured by

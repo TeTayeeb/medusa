@@ -1,0 +1,156 @@
+@startuml Cart Module — Class Diagram
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+package "Cart Module" {
+
+  class Cart {
+    + id : String <<PK>>
+    + region_id : String
+    + customer_id : String
+    + sales_channel_id : String
+    + email : String
+    + currency_code : String
+    + locale : String
+    + metadata : JSON
+    + completed_at : DateTime
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+    -- Computed Totals --
+    + total : BigNumber
+    + subtotal : BigNumber
+    + tax_total : BigNumber
+    + discount_total : BigNumber
+    + shipping_total : BigNumber
+    + gift_card_total : BigNumber
+    + item_total : BigNumber
+    + original_total : BigNumber
+  }
+
+  class LineItem {
+    + id : String <<PK>>
+    + cart_id : String <<FK>>
+    + variant_id : String
+    + product_id : String
+    + product_title : String
+    + variant_title : String
+    + variant_sku : String
+    + title : String
+    + subtitle : String
+    + thumbnail : String
+    + quantity : Integer
+    + is_discountable : Boolean
+    + is_tax_inclusive : Boolean
+    + unit_price : BigNumber
+    + compare_at_unit_price : BigNumber
+    + metadata : JSON
+  }
+
+  class LineItemAdjustment {
+    + id : String <<PK>>
+    + item_id : String <<FK>>
+    + promotion_id : String
+    + code : String
+    + description : String
+    + amount : BigNumber
+    + is_tax_inclusive : Boolean
+  }
+
+  class LineItemTaxLine {
+    + id : String <<PK>>
+    + item_id : String <<FK>>
+    + tax_rate_id : String
+    + code : String
+    + name : String
+    + provider_id : String
+    + rate : Float
+    + is_inclusive : Boolean
+  }
+
+  class ShippingMethod {
+    + id : String <<PK>>
+    + cart_id : String <<FK>>
+    + shipping_option_id : String
+    + name : String
+    + description : String
+    + amount : BigNumber
+    + is_tax_inclusive : Boolean
+    + data : JSON
+    + metadata : JSON
+  }
+
+  class ShippingMethodAdjustment {
+    + id : String <<PK>>
+    + shipping_method_id : String <<FK>>
+    + promotion_id : String
+    + code : String
+    + description : String
+    + amount : BigNumber
+    + is_tax_inclusive : Boolean
+  }
+
+  class ShippingMethodTaxLine {
+    + id : String <<PK>>
+    + shipping_method_id : String <<FK>>
+    + tax_rate_id : String
+    + code : String
+    + name : String
+    + provider_id : String
+    + rate : Float
+    + is_inclusive : Boolean
+  }
+
+  class Address {
+    + id : String <<PK>>
+    + first_name : String
+    + last_name : String
+    + company : String
+    + address_1 : String
+    + address_2 : String
+    + city : String
+    + country_code : String
+    + province : String
+    + postal_code : String
+    + phone : String
+    + metadata : JSON
+  }
+
+  class CreditLine {
+    + id : String <<PK>>
+    + cart_id : String <<FK>>
+    + reference : String
+    + reference_id : String
+    + amount : BigNumber
+    + metadata : JSON
+  }
+
+  class CartModuleService {
+    + createCarts(data[], ctx) : CartDTO[]
+    + retrieveCart(id, config, ctx) : CartDTO
+    + updateCarts(selector, data, ctx) : CartDTO[]
+    + addLineItems(data[], ctx) : LineItemDTO[]
+    + updateLineItems(selector, data, ctx) : LineItemDTO[]
+    + deleteLineItems(ids[], ctx) : void
+    + addShippingMethods(data[], ctx) : ShippingMethodDTO[]
+    + removeShippingMethods(ids[], ctx) : void
+    + setLineItemAdjustments(cartId, data[], ctx) : LineItemAdjustmentDTO[]
+    + setShippingMethodAdjustments(cartId, data[], ctx) : ShippingMethodAdjustmentDTO[]
+    + addLineItemTaxLines(data[], ctx) : LineItemTaxLineDTO[]
+    + addShippingMethodTaxLines(data[], ctx) : ShippingMethodTaxLineDTO[]
+  }
+
+  Cart "1" *-- "0..*" LineItem : items
+  Cart "1" *-- "0..*" ShippingMethod : shipping_methods
+  Cart "1" *-- "0..*" CreditLine : credit_lines
+  Cart --> Address : shipping_address
+  Cart --> Address : billing_address
+  LineItem "1" *-- "0..*" LineItemAdjustment : adjustments
+  LineItem "1" *-- "0..*" LineItemTaxLine : tax_lines
+  ShippingMethod "1" *-- "0..*" ShippingMethodAdjustment : adjustments
+  ShippingMethod "1" *-- "0..*" ShippingMethodTaxLine : tax_lines
+  CartModuleService ..> Cart : manages
+}
+
+@enduml

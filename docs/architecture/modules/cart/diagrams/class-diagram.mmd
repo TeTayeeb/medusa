@@ -1,0 +1,158 @@
+---
+title: Cart Module — Class Diagram
+---
+classDiagram
+    direction TB
+
+    class Cart {
+        +String id
+        +String region_id
+        +String customer_id
+        +String sales_channel_id
+        +String email
+        +String currency_code
+        +String locale
+        +JSON metadata
+        +DateTime completed_at
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+        +BigNumber total
+        +BigNumber subtotal
+        +BigNumber tax_total
+        +BigNumber discount_total
+        +BigNumber shipping_total
+        +BigNumber gift_card_total
+        +BigNumber item_total
+        +BigNumber original_total
+    }
+
+    class LineItem {
+        +String id
+        +String cart_id
+        +String variant_id
+        +String product_id
+        +String product_title
+        +String product_handle
+        +String variant_title
+        +String variant_sku
+        +String title
+        +String subtitle
+        +String thumbnail
+        +Integer quantity
+        +Boolean is_discountable
+        +Boolean is_tax_inclusive
+        +BigNumber unit_price
+        +BigNumber compare_at_unit_price
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+    }
+
+    class LineItemAdjustment {
+        +String id
+        +String item_id
+        +String promotion_id
+        +String code
+        +String description
+        +BigNumber amount
+        +Boolean is_tax_inclusive
+        +JSON provider_id
+    }
+
+    class LineItemTaxLine {
+        +String id
+        +String item_id
+        +String tax_rate_id
+        +String code
+        +String name
+        +String provider_id
+        +Float rate
+        +Boolean is_inclusive
+    }
+
+    class ShippingMethod {
+        +String id
+        +String cart_id
+        +String shipping_option_id
+        +String name
+        +String description
+        +BigNumber amount
+        +Boolean is_tax_inclusive
+        +JSON data
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+    }
+
+    class ShippingMethodAdjustment {
+        +String id
+        +String shipping_method_id
+        +String promotion_id
+        +String code
+        +String description
+        +BigNumber amount
+        +Boolean is_tax_inclusive
+    }
+
+    class ShippingMethodTaxLine {
+        +String id
+        +String shipping_method_id
+        +String tax_rate_id
+        +String code
+        +String name
+        +String provider_id
+        +Float rate
+        +Boolean is_inclusive
+    }
+
+    class Address {
+        +String id
+        +String first_name
+        +String last_name
+        +String company
+        +String address_1
+        +String address_2
+        +String city
+        +String country_code
+        +String province
+        +String postal_code
+        +String phone
+        +JSON metadata
+    }
+
+    class CreditLine {
+        +String id
+        +String cart_id
+        +String reference
+        +String reference_id
+        +BigNumber amount
+        +JSON metadata
+    }
+
+    class CartModuleService {
+        +createCarts()
+        +retrieveCart()
+        +updateCarts()
+        +addLineItems()
+        +updateLineItems()
+        +deleteLineItems()
+        +addShippingMethods()
+        +removeShippingMethods()
+        +setLineItemAdjustments()
+        +addLineItemAdjustments()
+        +setShippingMethodAdjustments()
+        +addLineItemTaxLines()
+        +addShippingMethodTaxLines()
+    }
+
+    Cart "1" --> "*" LineItem : items
+    Cart "1" --> "*" ShippingMethod : shipping_methods
+    Cart "1" --> "*" CreditLine : credit_lines
+    Cart "1" --> "0..1" Address : shipping_address
+    Cart "1" --> "0..1" Address : billing_address
+    LineItem "1" --> "*" LineItemAdjustment : adjustments
+    LineItem "1" --> "*" LineItemTaxLine : tax_lines
+    ShippingMethod "1" --> "*" ShippingMethodAdjustment : adjustments
+    ShippingMethod "1" --> "*" ShippingMethodTaxLine : tax_lines
+    CartModuleService --> Cart : manages

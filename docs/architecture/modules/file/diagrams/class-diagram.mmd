@@ -1,0 +1,90 @@
+classDiagram
+    direction TB
+
+    class IFileModuleService {
+        <<interface>>
+        +upload(file: ProviderUploadFileDTO) Promise~ProviderFileResultDTO~
+        +delete(file: ProviderDeleteFileDTO) Promise~void~
+        +getPresignedDownloadUrl(file: ProviderGetFileDTO) Promise~string~
+    }
+
+    class IFileProvider {
+        <<interface>>
+        +upload(file: ProviderUploadFileDTO) Promise~ProviderFileResultDTO~
+        +delete(file: ProviderDeleteFileDTO) Promise~void~
+        +getPresignedDownloadUrl(file: ProviderGetFileDTO) Promise~string~
+    }
+
+    class FileModuleService {
+        -provider: IFileProvider
+        +upload(file: ProviderUploadFileDTO) Promise~ProviderFileResultDTO~
+        +delete(file: ProviderDeleteFileDTO) Promise~void~
+        +getPresignedDownloadUrl(file: ProviderGetFileDTO) Promise~string~
+    }
+
+    class LocalFileProvider {
+        -uploadDir: string
+        +upload(file: ProviderUploadFileDTO) Promise~ProviderFileResultDTO~
+        +delete(file: ProviderDeleteFileDTO) Promise~void~
+        +getPresignedDownloadUrl(file: ProviderGetFileDTO) Promise~string~
+        -writeFileToDisk(filename: string, content: string) Promise~string~
+        -buildPublicUrl(filename: string) string
+    }
+
+    class S3FileProvider {
+        -s3Client: S3Client
+        -bucket: string
+        -region: string
+        +upload(file: ProviderUploadFileDTO) Promise~ProviderFileResultDTO~
+        +delete(file: ProviderDeleteFileDTO) Promise~void~
+        +getPresignedDownloadUrl(file: ProviderGetFileDTO) Promise~string~
+        -buildKey(filename: string) string
+    }
+
+    class ProviderUploadFileDTO {
+        <<interface>>
+        +filename: string
+        +mimeType: string
+        +content: string
+        +access: "public" | "private"
+    }
+
+    class ProviderFileResultDTO {
+        <<interface>>
+        +url: string
+        +key: string
+    }
+
+    class ProviderDeleteFileDTO {
+        <<interface>>
+        +fileKey: string
+    }
+
+    class ProviderGetFileDTO {
+        <<interface>>
+        +fileKey: string
+        +isPrivate?: boolean
+    }
+
+    class AdminUploadsRoute {
+        <<API route>>
+        +POST_upload(req, res) Promise~void~
+        +DELETE_file(req, res) Promise~void~
+        +POST_protected(req, res) Promise~void~
+    }
+
+    class S3Client {
+        <<aws-sdk-v3>>
+        +send(command: Command) Promise
+    }
+
+    IFileModuleService <|.. FileModuleService : implements
+    IFileProvider <|.. LocalFileProvider : implements
+    IFileProvider <|.. S3FileProvider : implements
+    FileModuleService *-- IFileProvider : delegates to
+    FileModuleService ..> ProviderUploadFileDTO : accepts
+    FileModuleService ..> ProviderFileResultDTO : returns
+    FileModuleService ..> ProviderDeleteFileDTO : accepts
+    FileModuleService ..> ProviderGetFileDTO : accepts
+    AdminUploadsRoute ..> FileModuleService : calls
+    S3FileProvider *-- S3Client : uses

@@ -1,0 +1,47 @@
+---
+title: Cancel Order Workflow — Sequence Diagram
+---
+sequenceDiagram
+    actor Merchant
+    participant AdminAPI as Admin API Route<br/>/admin/orders/:id/cancel
+    participant WF as cancelOrderWorkflow
+    participant FulfStep as cancelFulfillmentsStep
+    participant PayStep as cancelPaymentStep
+    participant OrdStep as cancelOrderStep
+    participant OrderSvc as OrderModuleService
+    participant PaySvc as PaymentModuleService
+    participant FulfSvc as FulfillmentModuleService
+    participant EventBus as Event Bus
+    participant DB as PostgreSQL
+
+    Merchant->>AdminAPI: POST /admin/orders/:id/cancel
+    AdminAPI->>WF: workflow.run({ id })
+
+    WF->>FulfStep: cancelFulfillments(order.fulfillments)
+    FulfStep->>FulfSvc: cancelFulfillment(fulfillmentId)
+    FulfSvc-->>FulfStep: cancelled
+
+    WF->>PayStep: cancelPayments(order.transactions)
+    PayStep->>PaySvc: cancelPayment(paymentId)
+    PaySvc-->>PayStep: cancelled
+
+    WF->>OrdStep: cancelOrder(id)
+    OrdStep->>OrderSvc: cancelOrder(id, context)
+    OrderSvc->>DB: BEGIN
+    OrderSvc->>DB: guard: status IN (pending, processing)?
+    alt status is valid
+        OrderSvc->>DB: UPDATE order SET status='cancelled', canceled_at=NOW()
+        OrderSvc->>DB: COMMIT
+        OrderSvc->>EventBus: emit order.cancelled (after commit)
+        OrdStep-->>WF: OrderDTO (cancelled)
+        WF-->>AdminAPI: { order: OrderDTO }
+        AdminAPI-->>Merchant: 200 OK
+    else invalid status
+        OrderSvc->>DB: ROLLBACK
+        OrderSvc-->>OrdStep: MedusaError NOT_ALLOWED
+        OrdStep-->>WF: throw
+        WF->>PayStep: compensation: uncancelPayment
+        WF->>FulfStep: compensation: uncancelFulfillment
+        WF-->>AdminAPI: 400 Bad Request
+        AdminAPI-->>Merchant: Error response
+    end

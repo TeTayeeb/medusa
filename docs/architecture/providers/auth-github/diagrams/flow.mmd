@@ -1,0 +1,48 @@
+sequenceDiagram
+    participant Browser
+    participant MedusaAPI as Medusa API
+    participant AuthMod as Auth Module
+    participant GithubSvc as GithubAuthService
+    participant StateStore as State Store
+    participant GitHub as GitHub OAuth API
+
+    Note over Browser,GitHub: Step 1 — Initiate redirect
+    Browser->>MedusaAPI: GET /auth/customer/github
+    MedusaAPI->>AuthMod: authenticate(actor_type, "github", req)
+    AuthMod->>GithubSvc: authenticate(req, authIdentityService)
+    GithubSvc->>GithubSvc: crypto.randomBytes(32) → stateKey
+    GithubSvc->>StateStore: setState(stateKey, { callback_url })
+    StateStore-->>GithubSvc: stored
+    GithubSvc->>GithubSvc: getRedirect(clientId, callbackUrl, stateKey)
+    GithubSvc-->>AuthMod: { success: true, location: "https://github.com/login/oauth/authorize?..." }
+    AuthMod-->>MedusaAPI: { location }
+    MedusaAPI-->>Browser: 302 Redirect → GitHub
+
+    Note over Browser,GitHub: User authenticates on GitHub
+    Browser->>GitHub: Login + Authorize app
+    GitHub-->>Browser: 302 Redirect → callbackUrl?code=xxx&state=stateKey
+
+    Note over Browser,GitHub: Step 2 — Handle callback
+    Browser->>MedusaAPI: GET /auth/customer/github/callback?code=xxx&state=stateKey
+    MedusaAPI->>AuthMod: validateCallback(actor_type, "github", req)
+    AuthMod->>GithubSvc: validateCallback(req, authIdentityService)
+    GithubSvc->>StateStore: getState(stateKey)
+    alt state missing or expired
+        StateStore-->>GithubSvc: null
+        GithubSvc-->>AuthMod: { success: false, error: "No state provided, or session expired" }
+        AuthMod-->>MedusaAPI: 401
+        MedusaAPI-->>Browser: error
+    else state valid
+        StateStore-->>GithubSvc: { callback_url }
+        GithubSvc->>GitHub: POST /login/oauth/access_token?code&client_id&client_secret&redirect_uri
+        GitHub-->>GithubSvc: { access_token, refresh_token, expires_in, ... }
+        GithubSvc->>GitHub: GET /user (Authorization: Bearer access_token)
+        GitHub-->>GithubSvc: { id, name, email, avatar_url, ... }
+        GithubSvc->>GithubSvc: entity_id = user.id.toString()
+        GithubSvc->>AuthMod: authIdentityService.update(entity_id, ...) or create(...)
+        AuthMod-->>GithubSvc: authIdentity
+        GithubSvc-->>AuthMod: { success: true, authIdentity }
+        AuthMod->>AuthMod: sign JWT
+        AuthMod-->>MedusaAPI: { token }
+        MedusaAPI-->>Browser: { token }
+    end

@@ -1,0 +1,168 @@
+@startuml Payment Module — Class Diagram
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+package "Payment Module" {
+
+  class PaymentCollection {
+    + id : String <<PK>>
+    + currency_code : String
+    + amount : BigNumber
+    + authorized_amount : BigNumber
+    + captured_amount : BigNumber
+    + refunded_amount : BigNumber
+    + completed_at : DateTime
+    + status : PaymentCollectionStatus
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  class PaymentSession {
+    + id : String <<PK>>
+    + payment_collection_id : String <<FK>>
+    + provider_id : String
+    + status : PaymentSessionStatus
+    + amount : BigNumber
+    + currency_code : String
+    + data : JSON
+    + context : JSON
+    + metadata : JSON
+    + authorized_at : DateTime
+    + created_at : DateTime
+    + updated_at : DateTime
+  }
+
+  class Payment {
+    + id : String <<PK>>
+    + payment_collection_id : String <<FK>>
+    + payment_session_id : String <<FK>>
+    + provider_id : String
+    + amount : BigNumber
+    + currency_code : String
+    + data : JSON
+    + metadata : JSON
+    + captured_at : DateTime
+    + canceled_at : DateTime
+    + created_at : DateTime
+    + updated_at : DateTime
+  }
+
+  class Capture {
+    + id : String <<PK>>
+    + payment_id : String <<FK>>
+    + amount : BigNumber
+    + created_by : String
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+  }
+
+  class Refund {
+    + id : String <<PK>>
+    + payment_id : String <<FK>>
+    + refund_reason_id : String <<FK>>
+    + amount : BigNumber
+    + note : String
+    + created_by : String
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+  }
+
+  class RefundReason {
+    + id : String <<PK>>
+    + value : String <<unique>>
+    + label : String
+    + description : String
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  class PaymentProvider {
+    + id : String <<PK>>
+    + is_enabled : Boolean
+  }
+
+  class AccountHolder {
+    + id : String <<PK>>
+    + customer_id : String <<unique per provider>>
+    + provider_id : String
+    + data : JSON
+    + metadata : JSON
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime
+  }
+
+  interface IPaymentProvider {
+    + initiatePayment(data) : Promise<InitiatePaymentOutput>
+    + authorizePayment(data) : Promise<AuthorizePaymentOutput>
+    + capturePayment(data) : Promise<CapturePaymentOutput>
+    + refundPayment(data) : Promise<RefundPaymentOutput>
+    + cancelPayment(data) : Promise<CancelPaymentOutput>
+    + retrievePayment(data) : Promise<RetrievePaymentOutput>
+    + deletePayment(data) : Promise<void>
+    + getWebhookActionAndData(data) : Promise<WebhookActionResult>
+  }
+
+  class PaymentModuleService {
+    + createPaymentCollections(data[], ctx) : PaymentCollectionDTO[]
+    + updatePaymentCollections(id, data, ctx) : PaymentCollectionDTO
+    + createPaymentSession(collId, data, ctx) : PaymentSessionDTO
+    + authorizePaymentSession(id, ctx) : PaymentDTO
+    + capturePayment(data, ctx) : PaymentDTO
+    + refundPayment(data, ctx) : PaymentDTO
+    + cancelPayment(id, ctx) : PaymentDTO
+    + processEvent(payload, ctx) : WebhookActionResult
+    + createAccountHolder(data, ctx) : AccountHolderDTO
+    + listPaymentProviders(filters, config, ctx) : PaymentProviderDTO[]
+  }
+
+  class PaymentProviderService {
+    - providers : Map<String, IPaymentProvider>
+    + initiatePayment(session) : Promise
+    + authorizePayment(session) : Promise
+    + capturePayment(payment) : Promise
+    + refundPayment(payment) : Promise
+    + cancelPayment(payment) : Promise
+    + getWebhookActionAndData(data) : Promise
+  }
+
+  enum PaymentCollectionStatus {
+    NOT_PAID
+    AWAITING
+    AUTHORIZED
+    PARTIALLY_CAPTURED
+    CAPTURED
+    PARTIALLY_REFUNDED
+    REFUNDED
+    CANCELED
+  }
+
+  enum PaymentSessionStatus {
+    PENDING
+    AUTHORIZED
+    REQUIRES_MORE
+    ERROR
+    CANCELED
+  }
+
+  PaymentCollection "1" *-- "0..*" PaymentSession : payment_sessions
+  PaymentCollection "1" *-- "0..*" Payment : payments
+  PaymentCollection "0..*" -- "0..*" PaymentProvider : providers
+  Payment "1" *-- "0..*" Capture : captures
+  Payment "1" *-- "0..*" Refund : refunds
+  Payment --> PaymentSession : session
+  Refund --> RefundReason : reason
+  PaymentModuleService --> PaymentProviderService : delegates
+  PaymentProviderService --> IPaymentProvider : dispatches
+  PaymentCollection --> PaymentCollectionStatus
+  PaymentSession --> PaymentSessionStatus
+}
+
+@enduml

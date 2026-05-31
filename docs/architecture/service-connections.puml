@@ -1,0 +1,99 @@
+@startuml Service Connections
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontSize 12
+skinparam ArrowColor #444444
+skinparam componentBorderColor #666666
+
+title Medusa Platform — Service Connection Diagram\n(docker-compose.yml)
+
+actor "Customer" as customer
+actor "Admin User" as admin
+
+package "Frontend" {
+  component [Storefront\nNext.js :8000] as storefront
+}
+
+package "Medusa Runtime" {
+  component [medusa-api\nWORKER_MODE=server\nHTTP :9000\nAdmin :5173] as api
+
+  package "Custom Modules (all in-process)" {
+    component [admin-bff\n(FEATURE_ADMIN_BFF_V2)] as bff
+    component [checkout-payment\n(FEATURE_CHECKOUT_PAYMENT_V2)] as cp
+    component [commerce-catalog\n(FEATURE_COMMERCE_CATALOG_V2)] as cc
+    component [customer-identity\n(FEATURE_CUSTOMER_IDENTITY_V2)] as ci
+    component [loyalty\n(FEATURE_LOYALTY_V2)] as loy
+    component [order-fulfillment\n(FEATURE_ORDER_FULFILLMENT_V2)] as of
+  }
+
+  component [medusa-worker\nWORKER_MODE=worker\n(no HTTP)] as worker
+  component [migrator\none-shot, exits 0] as migrator
+}
+
+package "Infrastructure" {
+  database "PostgreSQL\n:5432" as postgres
+  database "Redis\n:6379" as redis
+}
+
+customer --> storefront : HTTPS :8000
+admin --> api : HTTPS :9000/app\n(Admin Dashboard)
+storefront --> api : HTTP :9000\n(Store API)
+
+api -[dashed]-> bff
+api -[dashed]-> cp
+api -[dashed]-> cc
+api -[dashed]-> ci
+api -[dashed]-> loy
+api -[dashed]-> of
+
+api --> redis : workflow step publish\ncache / locking\nevent publish
+redis --> worker : step queue poll\nevent subscription
+
+api --> postgres : read / write
+worker --> postgres : read / write
+
+migrator --> postgres : db:migrate\n(one-shot)
+migrator ..> api : depends_on:\nservice_completed_successfully
+migrator ..> worker : depends_on:\nservice_completed_successfully
+
+note right of redis
+  @medusajs/workflow-engine-redis
+  @medusajs/event-bus-redis
+  @medusajs/cache-redis
+  @medusajs/locking-redis
+  ─────────────────────────
+  Stores:
+  - Workflow run state
+  - Step job queues
+  - Distributed locks
+  - Event subscriptions
+  - Query cache entries
+end note
+
+note right of worker
+  WORKER_MODE=worker
+  Picks up steps from Redis queue.
+  No HTTP port exposed.
+  ─────────────────────────
+  Handles:
+  - Background workflow steps
+  - Compensation (rollback)
+  - Event subscribers (order.placed → loyalty)
+  - Scheduled jobs
+  ─────────────────────────
+  Scale: docker compose up
+         --scale medusa-worker=N
+end note
+
+note right of api
+  WORKER_MODE=server
+  Serves all HTTP routes.
+  Publishes workflow steps to Redis.
+  ─────────────────────────
+  Custom modules are in-process
+  (Port/Adapter pattern).
+  Gated by feature flags.
+end note
+
+@enduml

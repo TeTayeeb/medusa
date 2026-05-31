@@ -1,0 +1,101 @@
+flowchart TD
+    %% ── Entry point ──────────────────────────────────────────────────────────
+    A(["🚀 createWorkflow(id, fn)\ncalled at module load time"])
+    A --> B["WorkflowDefinition registered\nin global workflow registry"]
+    B --> C["workflowDef.run(input, context)\ncalled from Route Handler"]
+
+    %% ── Instantiation ────────────────────────────────────────────────────────
+    C --> D["WorkflowRunner instantiated\n(WorkflowOrchestrator)"]
+    D --> E["Input validated &\npassed as WorkflowData"]
+
+    %% ── Step DAG resolution ──────────────────────────────────────────────────
+    E --> F["Build Step DAG\n(resolve data dependencies\nbetween steps)"]
+
+    %% ── Execution modes ──────────────────────────────────────────────────────
+    F --> G{{"Execution\nMode?"}}
+
+    G -->|"Sequential steps"| H["Execute Steps\none by one in order"]
+    G -->|"parallelize() call"| I["Execute Parallel Steps\nconcurrently via Promise.all"]
+
+    %% ── Single step execution ─────────────────────────────────────────────────
+    subgraph StepExec["Step Execution — createStep(id, invoke, compensate)"]
+        direction TB
+        S1["🔵 Step invoked\nstep.invoke(stepInput, ctx)"]
+        S2["container.resolve(Module)\nfrom DI container"]
+        S3["module.service.method(data)\n→ MikroORM → PostgreSQL"]
+        S4["StepResponse(result, compensationData)\nreturned to runner"]
+        S1 --> S2 --> S3 --> S4
+    end
+
+    H --> StepExec
+    I --> StepExec
+
+    %% ── transform() ──────────────────────────────────────────────────────────
+    StepExec --> T{{"transform()\ncalled?"}}
+    T -->|Yes| T1["Run pure transform function\n(reshape/combine step outputs)\nNo side effects allowed"]
+    T -->|No| U
+    T1 --> U
+
+    %% ── when() conditional ───────────────────────────────────────────────────
+    U{{"when(condition)\nbranch?"}}
+    U -->|"condition = true"| V["Execute conditional\nstep branch"]
+    U -->|"condition = false"| W["Skip conditional\nstep (no-op)"]
+    V --> X
+    W --> X
+
+    %% ── More steps? ──────────────────────────────────────────────────────────
+    X{{"More steps\nin DAG?"}}
+    X -->|Yes| H
+    X -->|No — all succeeded| Y
+
+    %% ── Success path ─────────────────────────────────────────────────────────
+    subgraph SuccessPath["✅ Success Path"]
+        direction TB
+        Y["All steps succeeded"]
+        H1["Emit Lifecycle Hooks\ncreatHook('eventName', payload)\n→ eventBus.emit()"]
+        H2["Subscribers invoked\n(async side-effects)"]
+        RR["WorkflowResponse(result)\nreturned to caller"]
+        Y --> H1 --> H2 --> RR
+    end
+
+    %% ── Failure / compensation ────────────────────────────────────────────────
+    StepExec -->|"⚠ Step throws error"| ERR
+
+    subgraph CompensationPath["🔴 Compensation Path (Saga Rollback)"]
+        direction TB
+        ERR["Step N failed\nError captured by runner"]
+        C1["Mark workflow as FAILED"]
+        C2["Collect compensation data\nfrom all previously-succeeded steps"]
+        C3["Execute compensations\nin REVERSE order\n(Step N-1 → … → Step 1)"]
+        C4["Each compensation:\nstep.compensate(compensationData, ctx)"]
+        C5["Module service rollback\n(softDelete / restore / void)"]
+        C6["Compensation complete\nthrow original MedusaError"]
+        ERR --> C1 --> C2 --> C3 --> C4 --> C5 --> C6
+    end
+
+    C6 -->|"Error propagated"| EH["Route Handler catches error\n→ HTTP 4xx/5xx response"]
+
+    %% ── Workflow persistence (long-running) ───────────────────────────────────
+    subgraph WorkflowPersistence["📦 Workflow State Persistence (long-running sagas)"]
+        direction LR
+        WS1["WorkflowStore module\npersists step results to DB/Redis"]
+        WS2["Resume from checkpoint\non worker restart"]
+        WS1 <-->|"checkpoint"| WS2
+    end
+
+    D -.->|"optional: persist state"| WorkflowPersistence
+
+    %% ── Styling ───────────────────────────────────────────────────────────────
+    classDef entry      fill:#dbeafe,stroke:#2563eb,color:#1e3a5f,font-weight:bold
+    classDef step       fill:#fef3c7,stroke:#d97706,color:#451a03
+    classDef success    fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef failure    fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+    classDef decision   fill:#f3e8ff,stroke:#9333ea,color:#2e1065
+    classDef persist    fill:#f1f5f9,stroke:#64748b,color:#374151
+
+    class A,B,C,D,E,F entry
+    class S1,S2,S3,S4,H,I,T1,V step
+    class Y,H1,H2,RR success
+    class ERR,C1,C2,C3,C4,C5,C6,EH failure
+    class G,T,U,X decision
+    class WS1,WS2 persist

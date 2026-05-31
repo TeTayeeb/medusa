@@ -1,0 +1,72 @@
+---
+title: Settings Module — Class Diagram
+---
+classDiagram
+    direction TB
+
+    class SettingsModuleService {
+        +get(key: string, options: GetSettingOptions) Promise~unknown~
+        +set(key: string, value: unknown, options: SetSettingOptions) Promise~SettingDTO~
+        +delete(key: string, options: SetSettingOptions) Promise~void~
+        +list(options: ListSettingOptions) Promise~SettingDTO[]~
+        +deleteByScope(scope: string) Promise~void~
+    }
+
+    class Setting {
+        +id: string
+        +scope: string
+        +key: string
+        +value: unknown
+        +created_at: Date
+        +updated_at: Date
+    }
+
+    class SettingDTO {
+        +id: string
+        +scope: string
+        +key: string
+        +value: unknown
+        +created_at: Date
+        +updated_at: Date
+    }
+
+    class GetSettingOptions {
+        +scope: string
+        +fallback: string[]
+    }
+
+    class SetSettingOptions {
+        +scope: string
+    }
+
+    class ListSettingOptions {
+        +scope: string
+    }
+
+    class ScopeResolver {
+        +resolve(key: string, scopeChain: string[]) Promise~unknown~
+        -queryScope(key: string, scope: string) Promise~Setting | null~
+    }
+
+    class SettingScope {
+        <<enumeration>>
+        GLOBAL
+        STORE
+        USER
+    }
+
+    class SettingsModuleOptions {
+        +max_value_size: number
+    }
+
+    note for SettingScope "Scope format:\nglobal\nstore:{id}\nuser:{id}"
+
+    SettingsModuleService --> ScopeResolver : uses for get()
+    SettingsModuleService "1" --> "*" Setting : persists
+    SettingsModuleService ..> SettingDTO : returns
+    SettingsModuleService ..> GetSettingOptions : accepts
+    SettingsModuleService ..> SetSettingOptions : accepts
+    SettingsModuleService ..> ListSettingOptions : accepts
+    ScopeResolver ..> SettingScope : validates against
+    SettingsModuleService ..> SettingsModuleOptions : configured by
+    Setting ..> SettingDTO : mapped to

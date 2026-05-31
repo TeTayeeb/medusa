@@ -1,0 +1,116 @@
+@startuml RegionModule
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classBorderColor #333333
+skinparam classBackgroundColor #FAFAFA
+skinparam arrowColor #555555
+skinparam noteBackgroundColor #FFFFF0
+skinparam noteBorderColor #AAAAAA
+
+title Region Module — Class Diagram\nMedusa v2.15.4
+
+entity Region {
+    + id : String <<PK, ULID>>
+    --
+    name : String
+    currency_code : String <<FK: Currency.code>>
+    automatic_taxes : Boolean
+    tax_rate : Float
+    tax_code : String
+    created_at : Timestamp
+    updated_at : Timestamp
+    deleted_at : Timestamp
+}
+
+entity RegionCountry {
+    + id : String <<PK, ULID>>
+    --
+    iso_2 : String <<UK>>
+    iso_3 : String
+    num_code : String
+    name : String
+    display_name : String
+    region_id : String <<FK: Region.id>>
+    created_at : Timestamp
+    updated_at : Timestamp
+}
+
+interface IRegionModuleService {
+    + createRegions(data, ctx) : RegionDTO[]
+    + updateRegions(data, ctx) : RegionDTO[]
+    + deleteRegions(ids, ctx) : void
+    + retrieveRegion(id, config, ctx) : RegionDTO
+    + listRegions(filters, config, ctx) : RegionDTO[]
+    + listAndCountRegions(filters, config, ctx) : Tuple<RegionDTO[], Integer>
+    + upsertRegionCountries(data, ctx) : RegionCountryDTO[]
+    + deleteRegionCountries(ids, ctx) : void
+}
+
+class RegionModuleService {
+    - regionRepository : Repository<Region>
+    - regionCountryRepository : Repository<RegionCountry>
+    + createRegions(data, ctx) : RegionDTO[]
+    + updateRegions(data, ctx) : RegionDTO[]
+    + deleteRegions(ids, ctx) : void
+    + retrieveRegion(id, config, ctx) : RegionDTO
+    + listRegions(filters, config, ctx) : RegionDTO[]
+    + upsertRegionCountries(data, ctx) : RegionCountryDTO[]
+}
+
+class RegionDTO {
+    + id : String
+    + name : String
+    + currency_code : String
+    + automatic_taxes : Boolean
+    + tax_rate : Float
+    + tax_code : String
+    + countries : RegionCountryDTO[]
+    + created_at : Date
+    + updated_at : Date
+    + deleted_at : Date
+}
+
+class RegionCountryDTO {
+    + id : String
+    + iso_2 : String
+    + iso_3 : String
+    + num_code : String
+    + name : String
+    + display_name : String
+    + region_id : String
+}
+
+class Currency <<external>> {
+    + code : String
+    + name : String
+    + symbol : String
+    + decimal_digits : Integer
+}
+
+Region "1" *-- "0..*" RegionCountry : contains
+IRegionModuleService <|.. RegionModuleService : implements
+RegionModuleService --> Region : manages
+RegionModuleService --> RegionCountry : manages
+Region ..> RegionDTO : serializes to
+RegionCountry ..> RegionCountryDTO : serializes to
+Region ..> Currency : references via currency_code
+
+note top of Region
+  Modules.REGION
+  Soft-deletable. Cart snapshots region_id at creation.
+  automatic_taxes drives checkout tax calculation.
+end note
+
+note right of RegionCountry
+  iso_2 has unique constraint.
+  A country belongs to exactly one region.
+  Countries moved atomically via upsertRegionCountries.
+end note
+
+note bottom of Currency
+  External dependency (Modules.CURRENCY).
+  Only currency_code string is stored in Region.
+  Validated at region create/update time.
+end note
+
+@enduml

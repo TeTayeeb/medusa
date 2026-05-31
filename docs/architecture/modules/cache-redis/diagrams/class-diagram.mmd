@@ -1,0 +1,65 @@
+classDiagram
+    direction TB
+
+    class ICacheService {
+        <<interface>>
+        +get~T~(key: string) Promise~T | null~
+        +set(key: string, data: unknown, ttl?: number) Promise~void~
+        +invalidate(key: string) Promise~void~
+    }
+
+    class RedisCacheService {
+        -redis: Redis
+        -options: CacheRedisOptions
+        +get~T~(key: string) Promise~T | null~
+        +set(key: string, data: unknown, ttl?: number) Promise~void~
+        +invalidate(key: string) Promise~void~
+        -serialize(data: unknown) string
+        -deserialize~T~(raw: string) T | null
+        -effectiveTtl(ttl?: number) number
+    }
+
+    class RedisConnection {
+        -options: CacheRedisOptions
+        -client: Redis
+        +getClient() Redis
+        +disconnect() Promise~void~
+        -onError(error: Error) void
+    }
+
+    class CacheRedisOptions {
+        <<interface>>
+        +redisUrl: string
+        +ttl?: number
+        +redisOptions?: RedisOptions
+    }
+
+    class Redis {
+        <<ioredis>>
+        +get(key: string) Promise~string | null~
+        +set(key: string, value: string) Promise~string~
+        +set(key: string, value: string, ex: string, seconds: number) Promise~string~
+        +del(...keys: string[]) Promise~number~
+        +ttl(key: string) Promise~number~
+    }
+
+    class Serialiser {
+        <<utility>>
+        +serialize(data: unknown) string
+        +deserialize~T~(raw: string) T
+    }
+
+    class ModuleDefinition {
+        <<module config>>
+        +key: Modules.CACHE
+        +resolve: string
+        +options: CacheRedisOptions
+    }
+
+    ICacheService <|.. RedisCacheService : implements
+    RedisCacheService *-- RedisConnection : uses
+    RedisCacheService ..> CacheRedisOptions : configured by
+    RedisCacheService ..> Serialiser : delegates JSON to
+    RedisConnection *-- Redis : manages
+    RedisCacheService ..> Redis : SET / GET / DEL
+    ModuleDefinition ..> RedisCacheService : registers

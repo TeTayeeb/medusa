@@ -1,0 +1,132 @@
+---
+title: "@medusajs/framework/types — Architecture"
+---
+classDiagram
+    direction TB
+
+    namespace HttpLayer {
+        class HttpTypes {
+            <<namespace>>
+            +AdminProductListParams
+            +AdminProductResponse
+            +AdminProductListResponse
+            +AdminCreateProduct
+            +AdminUpdateProduct
+            +StoreProductListParams
+            +StoreProductResponse
+            +StoreCreateCart
+            +StoreCartResponse
+        }
+    }
+
+    namespace ModuleInterfaces {
+        class IModuleService {
+            <<interface>>
+            +__joinerConfig() ModuleJoinerConfig
+        }
+
+        class IProductModuleService {
+            <<interface>>
+            +retrieveProduct(id, config?, ctx?) ProductDTO
+            +listProducts(filters?, config?, ctx?) ProductDTO[]
+            +listAndCountProducts(filters?, config?, ctx?)
+            +createProducts(data[], ctx?) ProductDTO[]
+            +updateProducts(data[], ctx?) ProductDTO[]
+            +deleteProducts(ids[], ctx?) void
+            +softDeleteProducts(ids[], ctx?) void
+            +restoreProducts(ids[], ctx?) void
+        }
+
+        class IOrderModuleService {
+            <<interface>>
+            +retrieveOrder(id, config?, ctx?) OrderDTO
+            +listOrders(filters?, config?, ctx?) OrderDTO[]
+            +createOrders(data[], ctx?) OrderDTO[]
+            +cancelOrder(id, ctx?) OrderDTO
+            +fulfillOrder(id, ctx?) OrderDTO
+        }
+
+        class IInventoryModuleService {
+            <<interface>>
+            +listInventoryItems(filters?, config?, ctx?)
+            +createInventoryItems(data[], ctx?)
+            +adjustInventory(data, ctx?)
+        }
+    }
+
+    namespace DTOs {
+        class ProductDTO {
+            +id: string
+            +title: string
+            +handle: string
+            +status: string
+            +variants: ProductVariantDTO[]
+            +options: ProductOptionDTO[]
+            +created_at: Date
+            +updated_at: Date
+            +deleted_at: Date
+        }
+
+        class ProductVariantDTO {
+            +id: string
+            +title: string
+            +sku: string
+            +prices: MoneyAmountDTO[]
+        }
+
+        class OrderDTO {
+            +id: string
+            +status: string
+            +total: number
+            +currency_code: string
+            +items: OrderLineItemDTO[]
+            +customer_id: string
+        }
+    }
+
+    namespace QueryTypes {
+        class Context {
+            <<type>>
+            +transactionManager?: TManager
+            +manager?: TManager
+            +isolationLevel?: string
+            +enableNestedTransactions?: boolean
+            +eventGroupId?: string
+            +transactionId?: string
+        }
+
+        class FindConfig {
+            <<type generic T>>
+            +select?: string[]
+            +relations?: string[]
+            +take?: number
+            +skip?: number
+            +order?: Order~T~
+            +withDeleted?: boolean
+        }
+
+        class BaseFilterable {
+            <<type generic T>>
+            +$and?: T[]
+            +$or?: T[]
+        }
+    }
+
+    IModuleService <|-- IProductModuleService : extends
+    IModuleService <|-- IOrderModuleService : extends
+    IModuleService <|-- IInventoryModuleService : extends
+
+    IProductModuleService ..> ProductDTO : returns
+    IProductModuleService ..> FindConfig : accepts
+    IProductModuleService ..> Context : accepts
+
+    IOrderModuleService ..> OrderDTO : returns
+    IOrderModuleService ..> Context : accepts
+
+    ProductDTO *-- ProductVariantDTO : contains
+    HttpTypes ..> ProductDTO : wraps
+    HttpTypes ..> OrderDTO : wraps
+
+    note for HttpTypes "HttpTypes namespace groups all\nAdmin* and Store* request/response\ntype pairs by resource"
+    note for Context "Passed as last arg to every\nmodule service method to\nshare a DB transaction"
+    note for BaseFilterable "Enables $and/$or filter\ncombinators on any entity\nfilter type"

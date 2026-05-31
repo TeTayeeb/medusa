@@ -1,0 +1,127 @@
+@startuml TaxModule
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classBorderColor #333333
+skinparam classBackgroundColor #FAFAFA
+skinparam arrowColor #555555
+skinparam noteBackgroundColor #FFFFF0
+skinparam noteBorderColor #AAAAAA
+
+title Tax Module — Class Diagram\nMedusa v2.15.4
+
+entity TaxRegion {
+    + id : String <<PK, ULID>>
+    --
+    country_code : String
+    province_code : String
+    parent_id : String <<FK: TaxRegion.id>>
+    provider_id : String <<FK: TaxProvider.id>>
+    created_at : Timestamp
+    updated_at : Timestamp
+    deleted_at : Timestamp
+}
+
+entity TaxRate {
+    + id : String <<PK, ULID>>
+    --
+    name : String
+    rate : Float
+    code : String
+    is_default : Boolean
+    is_combinable : Boolean
+    tax_region_id : String <<FK: TaxRegion.id>>
+    created_at : Timestamp
+    updated_at : Timestamp
+    deleted_at : Timestamp
+}
+
+entity TaxRateRule {
+    + id : String <<PK, ULID>>
+    --
+    tax_rate_id : String <<FK: TaxRate.id>>
+    reference : String
+    reference_id : String
+    created_at : Timestamp
+    updated_at : Timestamp
+    deleted_at : Timestamp
+}
+
+entity TaxProvider {
+    + id : String <<PK>>
+    --
+    is_enabled : Boolean
+    created_at : Timestamp
+    updated_at : Timestamp
+    deleted_at : Timestamp
+}
+
+interface ITaxProvider {
+    + {static} identifier : String
+    + {static} channels : String[]
+    + getTaxLines(items, shipping, ctx) : ProviderTaxLineDTO[]
+}
+
+interface ITaxModuleService {
+    + createTaxRegions(data, ctx) : TaxRegionDTO[]
+    + updateTaxRegions(data, ctx) : TaxRegionDTO[]
+    + deleteTaxRegions(ids, ctx) : void
+    + createTaxRates(data, ctx) : TaxRateDTO[]
+    + updateTaxRates(data, ctx) : TaxRateDTO[]
+    + deleteTaxRates(ids, ctx) : void
+    + createTaxRateRules(data, ctx) : TaxRateRuleDTO[]
+    + deleteTaxRateRules(ids, ctx) : void
+    + getTaxLines(items, shipping, ctx) : ItemTaxLineDTO[]
+}
+
+class TaxModuleService {
+    - taxRegionRepository : Repository<TaxRegion>
+    - taxRateRepository : Repository<TaxRate>
+    - taxRateRuleRepository : Repository<TaxRateRule>
+    - providerService : TaxProviderService
+    + getTaxLines(items, shipping, ctx) : ItemTaxLineDTO[]
+}
+
+class ItemTaxLineDTO {
+    + line_item_id : String
+    + shipping_method_id : String
+    + rate : Float
+    + name : String
+    + code : String
+    + provider_id : String
+}
+
+TaxRegion "1" *-- "0..*" TaxRate : has rates
+TaxRate "1" *-- "0..*" TaxRateRule : has rules
+TaxRegion "0..*" --> "0..1" TaxRegion : parent (province → country)
+TaxRegion "0..*" --> "0..1" TaxProvider : delegates to
+
+TaxProvider ..|> ITaxProvider : plugin registers as
+ITaxModuleService <|.. TaxModuleService : implements
+TaxModuleService --> TaxRegion : manages
+TaxModuleService ..> ItemTaxLineDTO : produces
+
+note top of TaxRegion
+  Modules.TAX
+  Hierarchy: country TaxRegion (parent) → province TaxRegion (child).
+  provider_id set → delegate calculation to external plugin.
+end note
+
+note right of TaxRateRule
+  reference: "product" | "product_type" | "product_tag"
+  reference_id: ID of the target entity.
+  Priority: product > product_type > product_tag > default rate.
+end note
+
+note bottom of ITaxProvider
+  Custom providers implement this interface.
+  Registered in medusa-config.ts under Tax module providers.
+  Examples: TaxJar, Avalara, custom.
+end note
+
+note left of TaxRate
+  is_default = true: used when no rule matches.
+  is_combinable = true: stacked with parent region rates.
+  rate: percentage (e.g. 19 for 19% VAT).
+end note
+
+@enduml

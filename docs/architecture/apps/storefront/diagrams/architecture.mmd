@@ -1,0 +1,124 @@
+---
+title: "@dtc/storefront — Architecture Diagram"
+---
+graph TB
+    subgraph Browser["Browser (Customer)"]
+        BROWSER_CLIENT["React Client Components\n(cart drawer, checkout form, account)"]
+    end
+
+    subgraph EdgeRuntime["Next.js Edge Runtime"]
+        MW["middleware.ts\nRegion detection → /[countryCode]/ redirect"]
+    end
+
+    subgraph NextServer["Next.js Node.js Runtime  :8000"]
+        direction TB
+
+        subgraph AppRouter["App Router  src/app/"]
+            ROOT_LAYOUT["Root layout.tsx\n(HTML shell, fonts)"]
+            COUNTRY_SEGMENT["[countryCode] segment"]
+
+            subgraph MainGroup["(main) route group"]
+                PAGE_HOME["/ — Homepage (SSR)"]
+                PAGE_STORE["store/ — All Products (SSR+Stream)"]
+                PAGE_PDP["products/[handle] — PDP (SSG+ISR)"]
+                PAGE_COLLECTION["collections/[handle] (SSR)"]
+                PAGE_CATEGORY["categories/[...slug] (SSR)"]
+                PAGE_CART["cart/ — Cart (CSR)"]
+                PAGE_ACCOUNT["account/ — Parallel Routes (CSR)"]
+                PAGE_ORDER["order/[id]/confirmed (SSR)"]
+                PAGE_TRANSFER["order/[id]/transfer/[token]"]
+            end
+
+            subgraph CheckoutGroup["(checkout) route group"]
+                PAGE_CHECKOUT["checkout/ — Full Checkout (CSR)"]
+            end
+        end
+
+        subgraph DataLayer["Data Layer  src/lib/data/"]
+            DATA_PRODUCTS["products.ts\ngetProductByHandle()\nlistProducts()"]
+            DATA_CART["cart.ts\nretrieveCart()\naddToCart()\nupdateLineItem()"]
+            DATA_CUSTOMER["customer.ts\ngetCustomer()\nlogin() · logout()"]
+            DATA_PAYMENT["payment.ts\ninitiatePaymentSession()\nplaceOrder()"]
+            DATA_FULFILLMENT["fulfillment.ts\nlistShippingMethods()\nsetShippingMethod()"]
+            DATA_ORDERS["orders.ts\nretrieveOrder()\nlistOrders()"]
+            DATA_REGIONS["regions.ts\ngetRegion()\nlistRegions()"]
+            DATA_COOKIES["cookies.ts\ncart ID · auth token"]
+        end
+
+        SDK_CLIENT["Medusa SDK Client\nsrc/lib/config.ts\n@medusajs/js-sdk\n+ x-medusa-locale header patch"]
+
+        subgraph Modules["Feature Modules  src/modules/"]
+            MOD_PRODUCTS["products/\nProductCard, Gallery\nVariantSelector, PDP Template"]
+            MOD_CART["cart/\nCartItem, EmptyCart\nCartItemSelect"]
+            MOD_CHECKOUT["checkout/\nAddressForm, ShippingSelect\nPaymentElement, ReviewStep"]
+            MOD_ACCOUNT["account/\nLoginForm, RegisterForm\nProfileForm, AddressBook"]
+            MOD_ORDER["order/\nOrderSummary, LineItems\nConfirmTemplate"]
+            MOD_LAYOUT["layout/\nHeader, Footer\nNavBar, CountrySelector"]
+            MOD_COMMON["common/\nButton, Input, Modal\nBreadcrumbs"]
+        end
+
+        subgraph Context["React Context  src/lib/context/"]
+            CTX_MODAL["modal-context.tsx\ncart drawer open/close"]
+        end
+    end
+
+    subgraph MedusaBackend["@dtc/backend  :9000"]
+        STORE_API["/store/* — Store API"]
+        AUTH_API["/auth/* — Auth API"]
+    end
+
+    subgraph ExternalServices["External Services"]
+        STRIPE["Stripe\n(PaymentElement + confirmPayment)"]
+        CDN["CDN / Next.js Image\nOptimisation"]
+    end
+
+    %% Routing flow
+    Browser -->|"HTTP request"| MW
+    MW -->|"redirect to /[countryCode]/..."| NextServer
+    COUNTRY_SEGMENT --> MainGroup & CheckoutGroup
+
+    %% Pages use templates from modules
+    PAGE_HOME --> MOD_LAYOUT & MOD_COMMON
+    PAGE_STORE --> MOD_PRODUCTS
+    PAGE_PDP --> MOD_PRODUCTS
+    PAGE_COLLECTION --> MOD_PRODUCTS
+    PAGE_CART --> MOD_CART
+    PAGE_CHECKOUT --> MOD_CHECKOUT
+    PAGE_ACCOUNT --> MOD_ACCOUNT
+    PAGE_ORDER --> MOD_ORDER
+
+    %% Pages call data layer
+    PAGE_HOME & PAGE_STORE & PAGE_PDP & PAGE_COLLECTION --> DATA_PRODUCTS
+    PAGE_CART --> DATA_CART
+    PAGE_CHECKOUT --> DATA_CART & DATA_PAYMENT & DATA_FULFILLMENT
+    PAGE_ACCOUNT --> DATA_CUSTOMER & DATA_ORDERS
+    PAGE_ORDER --> DATA_ORDERS
+
+    %% Data layer calls SDK
+    DATA_PRODUCTS & DATA_CART & DATA_CUSTOMER & DATA_PAYMENT & DATA_FULFILLMENT & DATA_ORDERS & DATA_REGIONS --> SDK_CLIENT
+    DATA_COOKIES -.->|"HTTP-only cookie r/w"| DATA_CART & DATA_CUSTOMER
+
+    %% SDK to backend
+    SDK_CLIENT -->|"HTTPS REST\npublishable key / JWT cookie"| STORE_API & AUTH_API
+
+    %% Checkout payment
+    MOD_CHECKOUT -->|"browser SDK"| STRIPE
+
+    %% Images
+    PAGE_PDP & PAGE_STORE -->|"optimised images"| CDN
+
+    %% Context
+    MOD_CART --> CTX_MODAL
+    MOD_LAYOUT --> CTX_MODAL
+
+    classDef page fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    classDef data fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef module fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+    classDef infra fill:#fef3c7,stroke:#f59e0b,color:#78350f
+    classDef external fill:#f3f4f6,stroke:#9ca3af,color:#374151
+
+    class PAGE_HOME,PAGE_STORE,PAGE_PDP,PAGE_COLLECTION,PAGE_CATEGORY,PAGE_CART,PAGE_ACCOUNT,PAGE_ORDER,PAGE_CHECKOUT,PAGE_TRANSFER page
+    class DATA_PRODUCTS,DATA_CART,DATA_CUSTOMER,DATA_PAYMENT,DATA_FULFILLMENT,DATA_ORDERS,DATA_REGIONS,DATA_COOKIES data
+    class MOD_PRODUCTS,MOD_CART,MOD_CHECKOUT,MOD_ACCOUNT,MOD_ORDER,MOD_LAYOUT,MOD_COMMON module
+    class STORE_API,AUTH_API infra
+    class STRIPE,CDN external

@@ -1,0 +1,95 @@
+---
+title: Store Module — Class Diagram
+---
+classDiagram
+    direction TB
+
+    class StoreModuleService {
+        +retrieveStore(id: string, config?: FindConfig) Promise~StoreDTO~
+        +listStores(filters?: FilterableStoreProps, config?: FindConfig) Promise~StoreDTO[]~
+        +createStores(data: CreateStoreDTO[]) Promise~StoreDTO[]~
+        +updateStores(data: UpdateStoreDTO[]) Promise~StoreDTO[]~
+        +deleteStores(ids: string[]) Promise~void~
+        +addStoreCurrencies(data: AddStoreCurrenciesDTO[]) Promise~StoreCurrencyDTO[]~
+        +removeStoreCurrencies(ids: string[]) Promise~void~
+        +upsertStores(data: UpsertStoreDTO[]) Promise~StoreDTO[]~
+        -validateDefaultCurrency(store: Store, code: string) void
+    }
+
+    class Store {
+        +id: string
+        +name: string
+        +default_currency_code: string
+        +supported_currencies: StoreCurrency[]
+        +metadata: Record~string, unknown~
+        +created_at: Date
+        +updated_at: Date
+        +deleted_at: Date
+    }
+
+    class StoreCurrency {
+        +id: string
+        +store_id: string
+        +currency_code: string
+        +is_default: boolean
+        +created_at: Date
+        +deleted_at: Date
+    }
+
+    class StoreDTO {
+        +id: string
+        +name: string
+        +default_currency_code: string
+        +supported_currencies: StoreCurrencyDTO[]
+        +metadata: Record~string, unknown~
+        +default_sales_channel?: SalesChannelDTO
+        +default_region?: RegionDTO
+    }
+
+    class StoreCurrencyDTO {
+        +id: string
+        +currency_code: string
+        +is_default: boolean
+    }
+
+    class CreateStoreDTO {
+        +name: string
+        +default_currency_code: string
+        +supported_currencies?: CreateStoreCurrencyDTO[]
+        +metadata?: object
+    }
+
+    class UpdateStoreDTO {
+        +id: string
+        +name?: string
+        +default_currency_code?: string
+        +metadata?: object
+    }
+
+    class StoreDefaultSalesChannelLink {
+        +id: string
+        +store_id: string
+        +sales_channel_id: string
+        +created_at: Date
+        +deleted_at: Date
+    }
+
+    class StoreDefaultRegionLink {
+        +id: string
+        +store_id: string
+        +region_id: string
+        +created_at: Date
+        +deleted_at: Date
+    }
+
+    StoreModuleService "1" --> "1" Store : manages
+    Store "1" --> "*" StoreCurrency : has
+    Store ..> StoreDefaultSalesChannelLink : linked via
+    Store ..> StoreDefaultRegionLink : linked via
+
+    StoreModuleService ..> StoreDTO : returns
+    StoreModuleService ..> CreateStoreDTO : accepts
+    StoreModuleService ..> UpdateStoreDTO : accepts
+    StoreDTO "1" --> "*" StoreCurrencyDTO : contains
+    Store ..> StoreDTO : mapped to
+    StoreCurrency ..> StoreCurrencyDTO : mapped to

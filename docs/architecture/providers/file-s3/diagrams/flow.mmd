@@ -1,0 +1,57 @@
+sequenceDiagram
+    participant Client as Client / Admin
+    participant MedusaAPI as Medusa API
+    participant FileMod as File Module
+    participant S3Svc as S3FileService
+    participant AWSSDK as AWS SDK v3
+    participant S3 as Amazon S3
+
+    Note over Client,S3: Upload flow
+    Client->>MedusaAPI: POST /admin/uploads\n(multipart/form-data: file)
+    MedusaAPI->>FileMod: upload(fileDTO)
+    FileMod->>S3Svc: upload({ filename, content, mimeType, access })
+    S3Svc->>S3Svc: parse filename, generate key\n= prefix + name-ULID + ext
+    S3Svc->>S3Svc: detect content encoding\n(base64 → binary | utf8)
+    S3Svc->>AWSSDK: PutObjectCommand({ Bucket, Key, Body, ACL, ContentType, CacheControl, Metadata })
+    AWSSDK->>S3: PUT /<bucket>/<key>
+    S3-->>AWSSDK: 200 OK
+    AWSSDK-->>S3Svc: success
+    S3Svc-->>FileMod: { url: "<file_url>/<encoded-key>", key }
+    FileMod-->>MedusaAPI: { file }
+    MedusaAPI-->>Client: { file: { url, key } }
+
+    Note over Client,S3: Presigned download URL
+    Client->>MedusaAPI: GET /admin/uploads/:key/url
+    MedusaAPI->>FileMod: getPresignedDownloadUrl({ fileKey })
+    FileMod->>S3Svc: getPresignedDownloadUrl({ fileKey })
+    S3Svc->>AWSSDK: getSignedUrl(GetObjectCommand, { expiresIn })
+    AWSSDK-->>S3Svc: presigned URL (expires in N seconds)
+    S3Svc-->>FileMod: presigned URL
+    FileMod-->>MedusaAPI: presigned URL
+    MedusaAPI-->>Client: { url: "<presigned-url>" }
+    Client->>S3: GET <presigned-url>
+    S3-->>Client: file content
+
+    Note over Client,S3: Direct client upload via presigned PUT URL
+    Client->>MedusaAPI: POST /admin/uploads/presigned\n{ filename, mimeType }
+    MedusaAPI->>FileMod: getPresignedUploadUrl(fileData)
+    FileMod->>S3Svc: getPresignedUploadUrl({ filename, mimeType, expiresIn })
+    S3Svc->>AWSSDK: getSignedUrl(PutObjectCommand, { expiresIn })
+    AWSSDK-->>S3Svc: presigned PUT URL
+    S3Svc-->>FileMod: { url: "<presigned-put-url>", key }
+    FileMod-->>MedusaAPI: { url, key }
+    MedusaAPI-->>Client: { url, key }
+    Client->>S3: PUT <presigned-url> (binary body)
+    S3-->>Client: 200 OK
+
+    Note over Client,S3: Delete flow
+    Client->>MedusaAPI: DELETE /admin/uploads/:key
+    MedusaAPI->>FileMod: delete({ fileKey })
+    FileMod->>S3Svc: delete({ fileKey })
+    S3Svc->>AWSSDK: DeleteObjectCommand({ Bucket, Key })
+    AWSSDK->>S3: DELETE /<bucket>/<key>
+    S3-->>AWSSDK: 204 No Content
+    AWSSDK-->>S3Svc: success
+    S3Svc-->>FileMod: void
+    FileMod-->>MedusaAPI: void
+    MedusaAPI-->>Client: 200 OK

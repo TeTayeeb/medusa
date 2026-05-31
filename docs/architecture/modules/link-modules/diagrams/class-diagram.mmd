@@ -1,0 +1,106 @@
+---
+title: Link Modules — Class Diagram
+---
+classDiagram
+    direction TB
+
+    class RemoteLinkService {
+        +create(data: LinkDefinition | LinkDefinition[]) Promise~void~
+        +delete(data: LinkDefinition | LinkDefinition[]) Promise~void~
+        +softDelete(data: LinkDefinition | LinkDefinition[]) Promise~void~
+        +restore(data: LinkDefinition | LinkDefinition[]) Promise~void~
+        +dismiss(data: LinkDefinition | LinkDefinition[]) Promise~void~
+        -resolveJoinerConfig(linkDef: LinkDefinition) ModuleJoinerConfig
+    }
+
+    class ModuleJoinerConfig {
+        +tableName: string
+        +schema: LinkTableSchema
+        +joiner: JoinerConfig
+        +isLink: boolean
+        +alias: JoinerAlias[]
+    }
+
+    class LinkTableSchema {
+        +entity_a_id: string
+        +entity_b_id: string
+        +data: object
+        +created_at: Date
+        +updated_at: Date
+        +deleted_at: Date
+    }
+
+    class LinkDefinition {
+        +moduleA: string
+        +entityA_id: string
+        +moduleB: string
+        +entityB_id: string
+        +data?: Record~string, unknown~
+    }
+
+    class LinkCascadeSubscriber {
+        -remoteLink: RemoteLinkService
+        +handleEntityDeleted(event: EntityDeletedEvent) Promise~void~
+        -findAffectedLinks(entityId: string, moduleName: string) ModuleJoinerConfig[]
+    }
+
+    class ProductSalesChannelLink {
+        +id: string
+        +product_id: string
+        +sales_channel_id: string
+        +data: object
+        +created_at: Date
+        +deleted_at: Date
+    }
+
+    class ProductVariantInventoryItemLink {
+        +id: string
+        +variant_id: string
+        +inventory_item_id: string
+        +data: object
+        +created_at: Date
+        +deleted_at: Date
+    }
+
+    class UserRoleLink {
+        +id: string
+        +user_id: string
+        +role_id: string
+        +created_at: Date
+        +deleted_at: Date
+    }
+
+    class StoreDefaultSalesChannelLink {
+        +id: string
+        +store_id: string
+        +sales_channel_id: string
+        +created_at: Date
+        +deleted_at: Date
+    }
+
+    class ApiKeySalesChannelLink {
+        +id: string
+        +api_key_id: string
+        +sales_channel_id: string
+        +created_at: Date
+        +deleted_at: Date
+    }
+
+    class IQuery {
+        <<interface>>
+        +graph(config: QueryConfig) Promise~QueryResult~
+    }
+
+    RemoteLinkService ..> ModuleJoinerConfig : resolves
+    RemoteLinkService ..> LinkDefinition : accepts
+    ModuleJoinerConfig --> LinkTableSchema : defines schema
+
+    LinkCascadeSubscriber --> RemoteLinkService : calls softDelete/delete
+
+    RemoteLinkService ..> ProductSalesChannelLink : manages
+    RemoteLinkService ..> ProductVariantInventoryItemLink : manages
+    RemoteLinkService ..> UserRoleLink : manages
+    RemoteLinkService ..> StoreDefaultSalesChannelLink : manages
+    RemoteLinkService ..> ApiKeySalesChannelLink : manages
+
+    IQuery --> ModuleJoinerConfig : traverses via

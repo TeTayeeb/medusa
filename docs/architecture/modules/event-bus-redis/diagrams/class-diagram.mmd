@@ -1,0 +1,83 @@
+classDiagram
+    direction TB
+
+    class IEventBusModuleService {
+        <<interface>>
+        +emit(eventName: string, data: T, options?: Record) Promise~void~
+        +emit(events: EmitData[]) Promise~void~
+        +subscribe(eventName: string, subscriber: Subscriber, context?: SubscriberContext) this
+        +unsubscribe(eventName: string, subscriber: Subscriber, context?: SubscriberContext) this
+    }
+
+    class EventBusRedisService {
+        -redis: Redis
+        -streamPoller: StreamPoller
+        -subscribers: Map~string, Map~string, Subscriber~~
+        -options: EventBusRedisOptions
+        +emit(eventName: string, data: T, options?) Promise~void~
+        +emit(events: EmitData[]) Promise~void~
+        +subscribe(eventName: string, subscriber: Subscriber, context?) this
+        +unsubscribe(eventName: string, subscriber: Subscriber, context?) this
+        -ensureConsumerGroup(streamKey: string) Promise~void~
+        -serializeMessage(event: EmitData) string
+        -deserializeMessage(raw: string) EmitData
+    }
+
+    class StreamPoller {
+        -redis: Redis
+        -service: EventBusRedisService
+        -running: boolean
+        +start() void
+        +stop() void
+        -poll() Promise~void~
+        -processMessages(messages: StreamMessage[]) Promise~void~
+        -ackMessage(streamKey: string, messageId: string) Promise~void~
+    }
+
+    class RedisConnection {
+        -options: EventBusRedisOptions
+        -client: Redis
+        +getClient() Redis
+        +disconnect() Promise~void~
+        -handleError(error: Error) void
+    }
+
+    class EventBusRedisOptions {
+        <<interface>>
+        +redisUrl: string
+        +streamName?: string
+        +consumerGroupName?: string
+        +batchSize?: number
+        +pollInterval?: number
+        +redisOptions?: RedisOptions
+    }
+
+    class StreamMessage {
+        <<type>>
+        +id: string
+        +fields: string[]
+    }
+
+    class EmitData {
+        <<interface>>
+        +eventName: string
+        +data: unknown
+        +options?: Record~string, unknown~
+    }
+
+    class Redis {
+        <<ioredis>>
+        +xadd(key: string, id: string, ...fields) Promise~string~
+        +xreadgroup(group: string, consumer: string, streams: string[], ids: string[]) Promise
+        +xack(key: string, group: string, ...ids: string[]) Promise~number~
+        +xgroup(cmd: string, key: string, group: string, id: string, mkstream?: string) Promise
+    }
+
+    IEventBusModuleService <|.. EventBusRedisService : implements
+    EventBusRedisService *-- StreamPoller : owns
+    EventBusRedisService *-- RedisConnection : uses
+    EventBusRedisService ..> EventBusRedisOptions : configured by
+    EventBusRedisService ..> EmitData : processes
+    StreamPoller ..> Redis : XREADGROUP / XACK
+    RedisConnection *-- Redis : manages
+    StreamPoller ..> StreamMessage : reads

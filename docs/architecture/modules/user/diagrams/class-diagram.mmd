@@ -1,0 +1,86 @@
+classDiagram
+    direction TB
+
+    class User {
+        +String id
+        +String first_name
+        +String last_name
+        +String email
+        +String avatar_url
+        +JSON metadata
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class Invite {
+        +String id
+        +String email
+        +Boolean accepted
+        +String token
+        +Date expires_at
+        +JSON metadata
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class IUserModuleService {
+        <<interface>>
+        +createUsers(data, ctx) UserDTO[]
+        +updateUsers(data, ctx) UserDTO[]
+        +deleteUsers(ids, ctx) void
+        +retrieveUser(id, config, ctx) UserDTO
+        +listUsers(filters, config, ctx) UserDTO[]
+        +createInvites(data, ctx) InviteDTO[]
+        +updateInvites(data, ctx) InviteDTO[]
+        +deleteInvites(ids, ctx) void
+        +retrieveInvite(id, config, ctx) InviteDTO
+        +validateInviteToken(token, ctx) InviteDTO
+        +retrieveInviteByToken(token, ctx) InviteDTO
+    }
+
+    class UserDTO {
+        <<interface>>
+        +String id
+        +String first_name
+        +String last_name
+        +String email
+        +String avatar_url
+        +JSON metadata
+    }
+
+    class InviteDTO {
+        <<interface>>
+        +String id
+        +String email
+        +Boolean accepted
+        +String token
+        +Date expires_at
+        +JSON metadata
+    }
+
+    class AuthIdentity {
+        <<external>>
+        +String id
+        +String provider_identity_id
+        +String provider
+    }
+
+    class UserAuthIdentityLink {
+        <<link table>>
+        +String user_id
+        +String auth_identity_id
+    }
+
+    User ..|> UserDTO : serializes to
+    Invite ..|> InviteDTO : serializes to
+    IUserModuleService ..> User : manages
+    IUserModuleService ..> Invite : manages
+
+    User "1" --> "0..1" UserAuthIdentityLink : linked via
+    AuthIdentity "1" --> "0..1" UserAuthIdentityLink : linked via
+
+    note for User "Modules.USER\nemail is unique. No passwords stored here.\nSoft-deletable."
+    note for Invite "token: crypto.randomBytes(32) hex.\nexpires_at: now + 7 days.\naccepted: true after use (one-time token)."
+    note for AuthIdentity "External: Auth Module.\nLinked via module link layer, not FK."

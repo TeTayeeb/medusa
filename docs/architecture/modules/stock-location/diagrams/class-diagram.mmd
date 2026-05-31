@@ -1,0 +1,62 @@
+classDiagram
+    direction TB
+
+    class StockLocation {
+        +String id
+        +String name
+        +String address_id
+        +JSON metadata
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class StockLocationAddress {
+        +String id
+        +String address_1
+        +String address_2
+        +String company
+        +String city
+        +String country_code
+        +String phone
+        +String province
+        +String postal_code
+        +JSON metadata
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class StockLocationModuleService {
+        +createStockLocations(data) StockLocationDTO
+        +upsertStockLocations(data) StockLocationDTO
+        +updateStockLocations(id, input) StockLocationDTO
+        +deleteStockLocations(ids) void
+        +listStockLocations(filters, config) StockLocationDTO[]
+        +retrieveStockLocation(id, config) StockLocationDTO
+        +upsertStockLocationAddresses(data) StockLocationAddressDTO
+    }
+
+    class ModuleLinkLayer {
+        <<external>>
+        +SalesChannel x StockLocation
+        +FulfillmentProvider x StockLocation
+    }
+
+    class InventoryLevel {
+        <<external>>
+        +String location_id
+        +note: soft ref to StockLocation.id
+    }
+
+    StockLocation "0..1" --> "0..1" StockLocationAddress : address (belongsTo)
+    StockLocationAddress "1" --> "0..1" StockLocation : stock_locations (hasOne)
+
+    StockLocationModuleService ..> StockLocation : manages
+    StockLocationModuleService ..> StockLocationAddress : manages
+
+    ModuleLinkLayer ..> StockLocation : references via link table
+    InventoryLevel ..> StockLocation : location_id soft ref
+
+    note for StockLocation "Soft delete only.\nNo cascade to InventoryLevel.\naddress_id is nullable."
+    note for StockLocationAddress "cascade delete → StockLocation\naddress_1 and country_code required"

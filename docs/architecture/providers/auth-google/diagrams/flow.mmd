@@ -1,0 +1,59 @@
+sequenceDiagram
+    participant Browser
+    participant MedusaAPI as Medusa API
+    participant AuthMod as Auth Module
+    participant GoogleSvc as GoogleAuthService
+    participant StateStore as State Store
+    participant Google as Google OAuth API
+
+    Note over Browser,Google: Step 1 — Initiate redirect
+    Browser->>MedusaAPI: GET /auth/customer/google
+    MedusaAPI->>AuthMod: authenticate(actor_type, "google", req)
+    AuthMod->>GoogleSvc: authenticate(req, authIdentityService)
+    GoogleSvc->>GoogleSvc: crypto.randomBytes(32) → stateKey
+    GoogleSvc->>StateStore: setState(stateKey, { callback_url })
+    StateStore-->>GoogleSvc: stored
+    GoogleSvc->>GoogleSvc: getRedirect(clientId, callbackUrl, stateKey)\nscope=email profile openid
+    GoogleSvc-->>AuthMod: { success: true, location: "https://accounts.google.com/o/oauth2/v2/auth?..." }
+    AuthMod-->>MedusaAPI: { location }
+    MedusaAPI-->>Browser: 302 Redirect → Google
+
+    Note over Browser,Google: User authenticates on Google
+    Browser->>Google: Sign in + Consent
+    Google-->>Browser: 302 Redirect → callbackUrl?code=yyy&state=stateKey
+
+    Note over Browser,Google: Step 2 — Handle callback
+    Browser->>MedusaAPI: GET /auth/customer/google/callback?code=yyy&state=stateKey
+    MedusaAPI->>AuthMod: validateCallback(actor_type, "google", req)
+    AuthMod->>GoogleSvc: validateCallback(req, authIdentityService)
+    GoogleSvc->>StateStore: getState(stateKey)
+    alt state missing or expired
+        StateStore-->>GoogleSvc: null
+        GoogleSvc-->>AuthMod: { success: false, error: "No state provided, or session expired" }
+        AuthMod-->>MedusaAPI: 401
+        MedusaAPI-->>Browser: error
+    else state valid
+        StateStore-->>GoogleSvc: { callback_url }
+        GoogleSvc->>Google: POST /token?code&client_id&client_secret&redirect_uri&grant_type=authorization_code
+        Google-->>GoogleSvc: { id_token: "<JWT>", access_token, ... }
+        GoogleSvc->>GoogleSvc: jwt.decode(id_token) → payload
+        alt email_verified === false
+            GoogleSvc-->>AuthMod: MedusaError(INVALID_DATA, "Email not verified")
+            AuthMod-->>MedusaAPI: 400
+            MedusaAPI-->>Browser: error
+        else email verified
+            GoogleSvc->>GoogleSvc: entity_id = payload.sub\nuserMetadata = { name, email, picture, ... }
+            GoogleSvc->>AuthMod: authIdentityService.retrieve({ entity_id })
+            alt new user (NOT_FOUND)
+                AuthMod-->>GoogleSvc: NOT_FOUND
+                GoogleSvc->>AuthMod: authIdentityService.create({ entity_id, user_metadata })
+                AuthMod-->>GoogleSvc: authIdentity (new)
+            else returning user
+                AuthMod-->>GoogleSvc: authIdentity (existing)
+            end
+            GoogleSvc-->>AuthMod: { success: true, authIdentity }
+            AuthMod->>AuthMod: sign JWT
+            AuthMod-->>MedusaAPI: { token }
+            MedusaAPI-->>Browser: { token }
+        end
+    end

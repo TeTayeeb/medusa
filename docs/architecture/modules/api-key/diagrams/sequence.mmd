@@ -1,0 +1,70 @@
+sequenceDiagram
+    actor Admin
+    participant AdminUI as Admin UI
+    participant AdminAPI as Admin API
+    participant CreateKeyWF as createApiKeysWorkflow
+    participant ApiKeyService as IApiKeyModuleService
+    participant DB as PostgreSQL
+    participant AuthMiddleware as Admin Auth Middleware
+    participant StoreMiddleware as Store Channel Middleware
+
+    Note over Admin, DB: Scenario 1: Create Secret API Key
+    Admin->>AdminUI: Create new API key\n(title: "CI/CD Pipeline Key", type: secret)
+    AdminUI->>AdminAPI: POST /admin/api-keys\n{ title, type: "secret" }
+    AdminAPI->>CreateKeyWF: run({ title, type, created_by })
+
+    CreateKeyWF->>CreateKeyWF: generate random token\n"sk_live_abc123...xyz789"
+    CreateKeyWF->>CreateKeyWF: bcrypt.genSalt()
+    CreateKeyWF->>CreateKeyWF: bcrypt.hash(token, salt) → hash
+    CreateKeyWF->>CreateKeyWF: compute redacted = "sk_...z789"
+
+    CreateKeyWF->>ApiKeyService: createApiKeys([{ token: hash, salt, redacted, title, type, created_by }])
+    ApiKeyService->>DB: INSERT api_key (hash stored in token field)
+    DB-->>ApiKeyService: ApiKey record (no plaintext token)
+    ApiKeyService-->>CreateKeyWF: ApiKeyDTO
+
+    CreateKeyWF-->>AdminAPI: { ...ApiKeyDTO, token: "sk_live_abc123...xyz789" }
+    AdminAPI-->>AdminUI: 201 Created { api_key: { ..., token: "sk_live_..." } }
+    AdminUI-->>Admin: ⚠️ Copy this token now — it won't be shown again!
+
+    Note over Admin, DB: Scenario 2: Secret Key Authentication (CI/CD Request)
+    Admin->>AdminAPI: POST /admin/products\nAuthorization: Bearer sk_live_abc123...xyz789
+    AdminAPI->>AuthMiddleware: validate bearer token
+    AuthMiddleware->>ApiKeyService: authenticate("sk_live_abc123...xyz789")
+    ApiKeyService->>DB: SELECT api_key WHERE type='secret' AND revoked_at IS NULL
+    DB-->>ApiKeyService: active secret keys
+    ApiKeyService->>ApiKeyService: bcrypt.compare(inputToken, storedHash) → match found
+    ApiKeyService->>DB: UPDATE api_key SET last_used_at = NOW() WHERE id = 'apk_01'
+    ApiKeyService-->>AuthMiddleware: ApiKeyDTO (authenticated)
+    AuthMiddleware-->>AdminAPI: request authorized
+    AdminAPI-->>Admin: 200 OK { products }
+
+    Note over Admin, DB: Scenario 3: Key Rotation
+    Admin->>AdminAPI: POST /admin/api-keys { title: "CI/CD Key v2", type: "secret" }
+    AdminAPI-->>Admin: 201 Created { token: "sk_live_new..." }
+    Note over Admin: Deploy new token to CI/CD
+    Admin->>AdminAPI: POST /admin/api-keys/:old_id/revoke
+    AdminAPI->>ApiKeyService: revokeApiKeys(["apk_old"])
+    ApiKeyService->>DB: UPDATE api_key\nSET revoked_at = NOW(), revoked_by = 'user_01'\nWHERE id = 'apk_old'
+    DB-->>ApiKeyService: OK
+    ApiKeyService-->>AdminAPI: ApiKeyDTO { revoked_at: "2025-06-20T..." }
+    AdminAPI-->>Admin: 200 OK — old key revoked immediately
+
+    Note over Admin, DB: Scenario 4: Publishable Key — Storefront Channel Scoping
+    Admin->>AdminAPI: POST /admin/api-keys { title: "EU Storefront", type: "publishable" }
+    AdminAPI-->>Admin: 201 Created { token: "pk_live_eu123..." }
+    Admin->>AdminAPI: POST /admin/api-keys/:id/sales-channels/batch\n{ add: ["sc_eu", "sc_de"] }
+    ApiKeyService->>DB: INSERT module_link (api_key_id, sales_channel_id) for each channel
+    DB-->>ApiKeyService: OK
+    AdminAPI-->>Admin: 200 OK — channels linked
+
+    Note over Admin, StoreMiddleware: Store API request with publishable key
+    Admin->>AdminAPI: GET /store/products\nx-publishable-api-key: pk_live_eu123...
+    AdminAPI->>StoreMiddleware: resolve sales channels
+    StoreMiddleware->>ApiKeyService: listApiKeys({ token: "pk_live_eu123..." })
+    ApiKeyService->>DB: SELECT api_key WHERE token = 'pk_live_eu123...' AND revoked_at IS NULL
+    DB-->>ApiKeyService: ApiKeyDTO (publishable)
+    StoreMiddleware->>DB: SELECT linked sales_channels via module link
+    DB-->>StoreMiddleware: [sc_eu, sc_de]
+    StoreMiddleware-->>AdminAPI: context scoped to [sc_eu, sc_de]
+    AdminAPI-->>Admin: 200 OK { products } (filtered by EU sales channels)

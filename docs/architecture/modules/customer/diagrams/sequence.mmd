@@ -1,0 +1,45 @@
+sequenceDiagram
+    autonumber
+    participant Storefront
+    participant StoreAPI as Store API
+    participant RegWorkflow as registerCustomerWorkflow
+    participant CustomerMod as Customer Module
+    participant AuthMod as Auth Module
+    participant DB as PostgreSQL
+
+    Note over Storefront, DB: Customer Registration Flow
+
+    Storefront->>StoreAPI: POST /store/customers<br/>{ email, password, first_name, last_name }
+
+    StoreAPI->>RegWorkflow: execute(input)
+
+    RegWorkflow->>AuthMod: createAuthIdentityStep<br/>{ provider: "emailpass", entity_id: email, password }
+    AuthMod->>DB: INSERT auth_identity
+    DB-->>AuthMod: auth_identity_id
+    AuthMod-->>RegWorkflow: AuthIdentityDTO
+
+    RegWorkflow->>CustomerMod: createCustomers_<br/>{ email, first_name, last_name, has_account: true }
+    CustomerMod->>DB: INSERT customer
+    DB-->>CustomerMod: Customer
+    CustomerMod-->>RegWorkflow: CustomerDTO
+
+    RegWorkflow->>AuthMod: setAuthAppMetadataStep<br/>{ auth_identity_id, key: "customer_id", value: customer.id }
+    AuthMod->>DB: UPDATE auth_identity.app_metadata
+    DB-->>AuthMod: ok
+    AuthMod-->>RegWorkflow: updated
+
+    RegWorkflow-->>StoreAPI: CustomerDTO
+
+    StoreAPI-->>Storefront: 201 { customer: { id, email, ... } }
+
+    Note over Storefront, DB: Add Customer to Group Flow
+
+    Storefront->>StoreAPI: POST /admin/customer-groups/:id/customers<br/>{ customer_ids: ["cus_01"] }
+
+    StoreAPI->>CustomerMod: addCustomerToGroup<br/>{ customer_id, customer_group_id }
+    CustomerMod->>DB: INSERT customer_group_customer
+    DB-->>CustomerMod: CustomerGroupCustomer
+    CustomerMod->>CustomerMod: @EmitEvents → customer_group.updated
+    CustomerMod-->>StoreAPI: { id }
+
+    StoreAPI-->>Storefront: 200 { customer_group: { id } }

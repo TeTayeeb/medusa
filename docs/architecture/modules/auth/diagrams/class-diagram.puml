@@ -1,0 +1,121 @@
+@startuml Auth Module — Class Diagram
+!theme plain
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor #FAFAFA
+    BorderColor #333333
+    ArrowColor #555555
+}
+
+enum MfaFactorStatus {
+    pending
+    enabled
+}
+
+class AuthIdentity {
+    + id : String <<PK, prefix:authid>>
+    + app_metadata : JSON <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class ProviderIdentity {
+    + id : String <<PK, ulid>>
+    + entity_id : String
+    + provider : String
+    + user_metadata : JSON <<nullable>>
+    + provider_metadata : JSON <<nullable, private>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class AuthMfaFactor {
+    + id : String <<PK, prefix:authmfa>>
+    + provider : String
+    + status : MfaFactorStatus
+    + provider_metadata : JSON <<nullable, private>>
+    + metadata : JSON <<nullable>>
+    + created_at : DateTime
+    + updated_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+class AuthMfaRecoveryCode {
+    + id : String <<PK, prefix:authmfarec>>
+    + code_hash : String <<bcrypt hash>>
+    + created_at : DateTime
+    + deleted_at : DateTime <<nullable>>
+}
+
+interface IAuthModuleService {
+    + authenticate(provider, data, scope) : AuthenticationResponse
+    + validateCallback(provider, data, scope) : AuthenticationResponse
+    + createAuthIdentities(data) : AuthIdentityDTO[]
+    + updateAuthIdentities(data) : AuthIdentityDTO[]
+    + deleteAuthIdentities(ids) : void
+    + retrieveAuthIdentity(id) : AuthIdentityDTO
+    + listAuthIdentities(filters) : AuthIdentityDTO[]
+    + createProviderIdentities(data) : ProviderIdentityDTO[]
+    + updateProviderIdentities(data) : ProviderIdentityDTO[]
+    + deleteProviderIdentities(ids) : void
+    + createMfaFactor(identityId, provider) : MfaFactorDTO
+    + verifyMfaFactor(identityId, provider, code) : Boolean
+    + deleteMfaFactor(id) : void
+    + generateMfaRecoveryCodes(identityId, count) : String[]
+    + verifyMfaRecoveryCode(identityId, code) : Boolean
+}
+
+abstract class AbstractAuthModuleProvider {
+    + {static} PROVIDER : String
+    + {static} DISPLAY_NAME : String
+    + {abstract} authenticate(data, service) : AuthenticationResponse
+    + {abstract} validateCallback(data, service) : AuthenticationResponse
+}
+
+class AuthenticationResponse {
+    + success : Boolean
+    + authIdentity : AuthIdentityDTO <<nullable>>
+    + error : String <<nullable>>
+    + status : Number <<nullable>>
+    + location : String <<nullable>>
+    + requires_mfa : Boolean <<nullable>>
+}
+
+class EmailPassProvider {
+    + authenticate(data, service) : AuthenticationResponse
+    + validateCallback(data, service) : AuthenticationResponse
+    - verifyPassword(plain, hash) : Boolean
+}
+
+class GitHubProvider {
+    + authenticate(data, service) : AuthenticationResponse
+    + validateCallback(data, service) : AuthenticationResponse
+    - exchangeCodeForToken(code) : String
+    - fetchUserProfile(token) : GitHubUser
+}
+
+class GoogleProvider {
+    + authenticate(data, service) : AuthenticationResponse
+    + validateCallback(data, service) : AuthenticationResponse
+    - exchangeCodeForToken(code) : String
+    - fetchUserProfile(token) : GoogleUser
+}
+
+AuthIdentity "1" *-- "1..*" ProviderIdentity : provider_identities >
+AuthIdentity "1" *-- "0..*" AuthMfaFactor : mfa_factors >
+AuthIdentity "1" *-- "0..*" AuthMfaRecoveryCode : mfa_recovery_codes >
+
+IAuthModuleService ..> AuthIdentity : manages
+IAuthModuleService ..> AbstractAuthModuleProvider : delegates >
+IAuthModuleService ..> AuthenticationResponse : returns
+
+AbstractAuthModuleProvider <|-- EmailPassProvider
+AbstractAuthModuleProvider <|-- GitHubProvider
+AbstractAuthModuleProvider <|-- GoogleProvider
+
+AuthMfaFactor ..> MfaFactorStatus
+
+@enduml

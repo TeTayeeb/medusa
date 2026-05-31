@@ -1,0 +1,85 @@
+classDiagram
+    direction TB
+
+    class SalesChannel {
+        +String id
+        +String name
+        +String description
+        +Boolean is_disabled
+        +JSON metadata
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class ISalesChannelModuleService {
+        <<interface>>
+        +createSalesChannels(data, ctx) SalesChannelDTO[]
+        +updateSalesChannels(data, ctx) SalesChannelDTO[]
+        +deleteSalesChannels(ids, ctx) void
+        +retrieveSalesChannel(id, config, ctx) SalesChannelDTO
+        +listSalesChannels(filters, config, ctx) SalesChannelDTO[]
+        +listAndCountSalesChannels(filters, config, ctx) SalesChannelDTO[]~number~
+    }
+
+    class SalesChannelDTO {
+        <<interface>>
+        +String id
+        +String name
+        +String description
+        +Boolean is_disabled
+        +JSON metadata
+        +Date created_at
+        +Date updated_at
+        +Date deleted_at
+    }
+
+    class ProductSalesChannelLink {
+        <<link table>>
+        +String product_id
+        +String sales_channel_id
+    }
+
+    class StockLocationSalesChannelLink {
+        <<link table>>
+        +String stock_location_id
+        +String sales_channel_id
+    }
+
+    class ApiKeySalesChannelLink {
+        <<link table>>
+        +String publishable_key_id
+        +String sales_channel_id
+    }
+
+    class Product {
+        <<external>>
+        +String id
+        +String title
+    }
+
+    class StockLocation {
+        <<external>>
+        +String id
+        +String name
+    }
+
+    class PublishableApiKey {
+        <<external>>
+        +String id
+        +String token
+    }
+
+    SalesChannel ..|> SalesChannelDTO : serializes to
+    ISalesChannelModuleService ..> SalesChannel : manages
+
+    SalesChannel "1" --> "0..*" ProductSalesChannelLink : product links
+    SalesChannel "1" --> "0..*" StockLocationSalesChannelLink : location links
+    SalesChannel "1" --> "0..*" ApiKeySalesChannelLink : api key links
+
+    Product "1" --> "0..*" ProductSalesChannelLink : linked via
+    StockLocation "1" --> "0..*" StockLocationSalesChannelLink : linked via
+    PublishableApiKey "1" --> "0..*" ApiKeySalesChannelLink : linked via
+
+    note for SalesChannel "Modules.SALES_CHANNEL\nSingle table, no FK columns.\nAll associations via link tables."
+    note for ApiKeySalesChannelLink "Resolved from x-publishable-api-key header.\nMaps storefront requests to a channel."

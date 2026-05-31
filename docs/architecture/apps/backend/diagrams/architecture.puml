@@ -1,0 +1,137 @@
+@startuml @dtc/backend Architecture
+
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam ArrowColor #374151
+skinparam defaultFontName "Segoe UI, Arial"
+skinparam defaultFontSize 12
+skinparam padding 8
+skinparam linetype ortho
+
+title @dtc/backend — Component Architecture\nMedusa v2.15.3
+
+' ─── Clients ───────────────────────────────────────────────────────────────
+package "Clients" #E0F2FE {
+  component "Storefront\n(Next.js :8000)" as SF
+  component "Admin Browser\n(Dashboard)" as ADMIN
+}
+
+' ─── backend-server ─────────────────────────────────────────────────────────
+package "backend-server  WORKER_MODE=server" #F0FDF4 {
+
+  package "HTTP Layer" #DCFCE7 {
+    component "Express Middleware\nCORS · Auth · Body Parser" as MW
+    component "HTTP Router\n(Auto-discovered routes)" as ROUTER
+  }
+
+  package "API Namespaces" #BBF7D0 {
+    component "/store/*" as STORE_API
+    component "/admin/*" as ADMIN_API
+    component "/auth/*" as AUTH_API
+    component "/store/custom/*" as CSTORE
+    component "/admin/custom/*" as CADMIN
+    component "/cloud/auth/*" as CLOUD
+  }
+
+  package "Built-in Medusa Modules" #DBEAFE {
+    component "Product" as MOD_PRODUCT
+    component "Order" as MOD_ORDER
+    component "Cart" as MOD_CART
+    component "Customer" as MOD_CUSTOMER
+    component "Payment" as MOD_PAYMENT
+    component "Fulfillment" as MOD_FULFILL
+    component "Inventory" as MOD_INVENTORY
+    component "Pricing" as MOD_PRICING
+  }
+
+  package "Custom Domain Modules  src/modules/" #EDE9FE {
+    component "loyalty\nPoints & Rewards" as LOYALTY
+    component "admin-bff\nAdmin BFF" as ADMINBFF
+    component "commerce-catalog\nCatalog Extensions" as CATALOG
+    component "customer-identity\nAuth & Identity" as IDENTITY
+    component "checkout-payment\nPayment Orchestration" as CHKPAY
+    component "order-fulfillment\nFulfillment Routing" as ORDFULL
+  }
+
+  component "Workflow Engine\n(createWorkflow / createStep)" as WF
+  component "Module Links  src/links/" as LINKS
+  component "Admin Extensions\nsrc/admin/widgets" as ADMINEXT
+}
+
+' ─── backend-worker ──────────────────────────────────────────────────────────
+package "backend-worker  WORKER_MODE=worker" #FDF4FF {
+  component "Subscribers\nsrc/subscribers/" as SUBS
+  component "Scheduled Jobs\nsrc/jobs/" as JOBS
+}
+
+' ─── Infrastructure ──────────────────────────────────────────────────────────
+package "Infrastructure" #FEF3C7 {
+  database "PostgreSQL\n(MikroORM)" as PG
+  database "Redis\n(Queue + Cache)" as REDIS
+}
+
+' ─── External Services ───────────────────────────────────────────────────────
+package "External Services" #F3F4F6 {
+  component "Stripe API" as STRIPE
+  component "Email Provider" as EMAIL
+}
+
+' ─── Relationships ───────────────────────────────────────────────────────────
+SF   -right-> MW : "Publishable Key\nHTTPS REST"
+ADMIN -right-> MW : "JWT Bearer\nHTTPS REST"
+
+MW --> ROUTER
+ROUTER --> STORE_API
+ROUTER --> ADMIN_API
+ROUTER --> AUTH_API
+ROUTER --> CSTORE
+ROUTER --> CADMIN
+ROUTER --> CLOUD
+
+STORE_API --> WF
+ADMIN_API --> WF
+AUTH_API  --> WF
+CSTORE    --> WF
+CADMIN    --> WF
+
+WF --> MOD_PRODUCT
+WF --> MOD_ORDER
+WF --> MOD_CART
+WF --> MOD_CUSTOMER
+WF --> MOD_PAYMENT
+WF --> MOD_FULFILL
+WF --> LOYALTY
+WF --> ADMINBFF
+WF --> CATALOG
+WF --> IDENTITY
+WF --> CHKPAY
+WF --> ORDFULL
+
+LINKS ..> MOD_CUSTOMER : "FK link"
+LINKS ..> LOYALTY      : "FK link"
+
+MOD_PRODUCT    --> PG
+MOD_ORDER      --> PG
+MOD_CART       --> PG
+MOD_CUSTOMER   --> PG
+MOD_PAYMENT    --> PG
+MOD_FULFILL    --> PG
+MOD_INVENTORY  --> PG
+MOD_PRICING    --> PG
+LOYALTY        --> PG
+ADMINBFF       --> PG
+CATALOG        --> PG
+IDENTITY       --> PG
+CHKPAY         --> PG
+ORDFULL        --> PG
+
+' Worker communication via Redis
+WF    --> REDIS : "emit events"
+REDIS --> SUBS  : "consume events"
+SUBS  --> WF
+JOBS  --> WF
+
+CHKPAY   --> STRIPE : "HTTPS"
+IDENTITY --> EMAIL  : "SMTP / API"
+
+@enduml

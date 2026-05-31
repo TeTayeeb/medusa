@@ -1,0 +1,119 @@
+@startuml @medusajs/framework Architecture
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam componentStyle rectangle
+skinparam defaultFontName "Helvetica Neue"
+
+title @medusajs/framework — Runtime Architecture (v2.15.4)
+
+' ======== Actors ========
+actor "Browser / Mobile" as Client
+actor "Admin CLI" as CLI
+
+' ======== HTTP Layer ========
+package "HTTP Sub-system" {
+  component [Express.js Server] as Express
+  component [routes-finder] as RoutesFinder
+  component [routes-sorter] as RoutesSorter
+  component [routes-loader] as RoutesLoader
+  component [middleware-file-loader] as MWLoader
+  component [Auth / CORS / Rate-limit\nPolicies] as Policies
+  component [Zod Validation] as ZodVal
+}
+
+' ======== App Loader ========
+package "Application Bootstrap" {
+  component [MedusaAppLoader] as AppLoader
+  component [Config Loader\n(medusa-config.ts)] as ConfigLoader
+}
+
+' ======== DI ========
+package "DI Container" {
+  component [Awilix Container\n(Singleton + Scoped)] as Awilix
+}
+
+' ======== Database ========
+package "Database Layer" {
+  component [pg-connection-loader\n(Knex Pool)] as KnexPool
+  component [MikroORM\n(Entity Managers)] as MikroORM
+  component [Migration Runner] as MigRunner
+  database "PostgreSQL" as PG
+}
+
+' ======== Modules ========
+package "Module System" {
+  component [Modules Loader] as ModLoader
+  component [Link Modules] as LinkMod
+  component [RemoteLink Resolver] as RemLink
+  component [Query Engine] as QEngine
+}
+
+' ======== Commerce Modules ========
+package "Commerce Modules (30+)" {
+  component [Product Module] as ProdMod
+  component [Order Module] as OrdMod
+  component [Cart Module] as CartMod
+  component [Payment Module] as PayMod
+}
+
+' ======== Async ========
+package "Async Sub-systems" {
+  component [Jobs Loader\n(cron)] as Jobs
+  component [Subscribers Loader\n(event bus)] as Subs
+  component [Telemetry] as Telemetry
+  database "Redis (optional)" as Redis
+}
+
+' ======== Connections ========
+Client --> Express : HTTPS
+CLI --> Express : HTTPS
+
+AppLoader --> ConfigLoader
+AppLoader --> Awilix
+AppLoader --> KnexPool
+AppLoader --> ModLoader
+AppLoader --> LinkMod
+AppLoader --> Express
+AppLoader --> Jobs
+AppLoader --> Subs
+
+Express --> RoutesFinder
+RoutesFinder --> RoutesSorter
+RoutesSorter --> RoutesLoader
+Express --> MWLoader
+Express --> Policies
+Policies --> ZodVal
+ZodVal --> RoutesLoader
+
+Awilix --> ProdMod
+Awilix --> OrdMod
+Awilix --> CartMod
+Awilix --> PayMod
+
+KnexPool --> MikroORM
+MikroORM --> PG
+MigRunner --> PG
+
+ModLoader --> Awilix
+LinkMod --> RemLink
+RemLink --> QEngine
+QEngine --> Awilix
+
+Jobs --> Redis
+Subs --> Redis
+
+note bottom of AppLoader
+  Root orchestrator.
+  Runs loaders in dependency order:
+  Config → Container → DB → Modules
+  → Links → HTTP → Jobs → Subscribers
+end note
+
+note right of RemLink
+  Resolves cross-module
+  data relationships at
+  runtime without direct
+  DB joins between modules.
+end note
+
+@enduml

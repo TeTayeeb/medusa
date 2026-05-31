@@ -1,0 +1,109 @@
+@startuml Customer Module Class Diagram
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classFontSize 12
+skinparam shadowing false
+
+package "Customer Module" {
+
+    class Customer {
+        +id : String <<PK>>
+        +company_name : String?
+        +first_name : String?
+        +last_name : String?
+        +email : String?
+        +phone : String?
+        +has_account : Boolean
+        +metadata : JSON?
+        +created_by : String?
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    class CustomerGroup {
+        +id : String <<PK>>
+        +name : String <<unique>>
+        +metadata : JSON?
+        +created_by : String?
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    class CustomerGroupCustomer {
+        +id : String <<PK>>
+        +customer_id : String <<FK>>
+        +customer_group_id : String <<FK>>
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    class CustomerAddress {
+        +id : String <<PK>>
+        +address_name : String?
+        +is_default_shipping : Boolean
+        +is_default_billing : Boolean
+        +company : String?
+        +first_name : String?
+        +last_name : String?
+        +address_1 : String?
+        +address_2 : String?
+        +city : String?
+        +country_code : String?
+        +province : String?
+        +postal_code : String?
+        +phone : String?
+        +metadata : JSON?
+        +customer_id : String <<FK>>
+        +created_at : DateTime
+        +updated_at : DateTime
+        +deleted_at : DateTime?
+    }
+
+    interface ICustomerModuleService {
+        +createCustomers(data) : CustomerDTO
+        +updateCustomers(id, data) : CustomerDTO
+        +deleteCustomers(ids) : void
+        +listCustomers(filters, config) : CustomerDTO[]
+        +createCustomerGroups(data) : CustomerGroupDTO
+        +updateCustomerGroups(id, data) : CustomerGroupDTO
+        +addCustomerToGroup(pair) : {id}
+        +removeCustomerFromGroup(pair) : void
+        +createCustomerAddresses(data) : CustomerAddressDTO
+        +updateCustomerAddresses(id, data) : CustomerAddressDTO
+        +deleteCustomerAddresses(ids) : void
+    }
+
+    class CustomerModuleService {
+        -customerService_ : IMedusaInternalService
+        -customerAddressService_ : IMedusaInternalService
+        -customerGroupService_ : IMedusaInternalService
+        -customerGroupCustomerService_ : IMedusaInternalService
+        -baseRepository_ : RepositoryService
+    }
+
+    Customer "1" o-- "0..*" CustomerAddress : has (cascade delete)
+    Customer "0..*" <--> "0..*" CustomerGroup : many-to-many
+    CustomerGroupCustomer --> Customer : customer_id
+    CustomerGroupCustomer --> CustomerGroup : customer_group_id
+    CustomerModuleService ..|> ICustomerModuleService
+    CustomerModuleService ..> Customer
+    CustomerModuleService ..> CustomerGroup
+    CustomerModuleService ..> CustomerAddress
+    CustomerModuleService ..> CustomerGroupCustomer
+}
+
+note bottom of Customer
+  Unique index: (email, has_account)
+  WHERE deleted_at IS NULL
+end note
+
+note bottom of CustomerGroup
+  Unique index: (name)
+  WHERE deleted_at IS NULL
+  name is translatable
+end note
+
+@enduml

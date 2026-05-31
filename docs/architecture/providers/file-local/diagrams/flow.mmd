@@ -1,0 +1,63 @@
+sequenceDiagram
+    participant Client as Client / Admin UI
+    participant MedusaAPI as Medusa API (Express)
+    participant FileMod as File Module
+    participant LocalSvc as LocalFileService
+    participant FS as Local Filesystem
+    participant StaticMW as Express Static Middleware
+
+    Note over Client,StaticMW: Upload flow
+    Client->>MedusaAPI: POST /admin/uploads\n(multipart/form-data)
+    MedusaAPI->>FileMod: upload(fileDTO)
+    FileMod->>LocalSvc: upload({ filename, content, access, ... })
+    LocalSvc->>LocalSvc: parse filename → dir, name, ext
+    LocalSvc->>LocalSvc: fileKey = [private-]Date.now()-filename.ext
+    LocalSvc->>LocalSvc: baseDir = access==="public" ? uploadDir : privateUploadDir
+    LocalSvc->>FS: ensureDirExists(baseDir, subDir)\n→ fs.mkdir({ recursive: true })
+    FS-->>LocalSvc: directory ready
+    LocalSvc->>LocalSvc: decode content\n(base64 → buffer | utf8 | binary)
+    LocalSvc->>FS: fs.writeFile(filePath, content)
+    FS-->>LocalSvc: written
+    LocalSvc-->>FileMod: { key: fileKey, url: backendUrl/fileKey }
+    FileMod-->>MedusaAPI: { file }
+    MedusaAPI-->>Client: { file: { url, key } }
+
+    Note over Client,StaticMW: Serving file (static middleware)
+    Client->>MedusaAPI: GET /static/<fileKey>
+    MedusaAPI->>StaticMW: serve /static/<fileKey>
+    StaticMW->>FS: read <uploadDir>/<fileKey>
+    FS-->>StaticMW: file bytes
+    StaticMW-->>Client: file content (200 OK)
+
+    Note over Client,StaticMW: Download URL (no real presigning)
+    Client->>MedusaAPI: GET /admin/uploads/:key/url
+    MedusaAPI->>FileMod: getPresignedDownloadUrl({ fileKey })
+    FileMod->>LocalSvc: getPresignedDownloadUrl({ fileKey })
+    LocalSvc->>FS: fs.access(filePath, F_OK)
+    alt file exists
+        FS-->>LocalSvc: ok
+        LocalSvc-->>FileMod: "<backendUrl>/<fileKey>" (direct URL)
+        FileMod-->>MedusaAPI: url
+        MedusaAPI-->>Client: { url }
+    else file missing
+        FS-->>LocalSvc: ENOENT
+        LocalSvc-->>FileMod: MedusaError(NOT_FOUND)
+        FileMod-->>MedusaAPI: 404
+        MedusaAPI-->>Client: error
+    end
+
+    Note over Client,StaticMW: Delete flow
+    Client->>MedusaAPI: DELETE /admin/uploads/:key
+    MedusaAPI->>FileMod: delete({ fileKey })
+    FileMod->>LocalSvc: delete({ fileKey })
+    LocalSvc->>LocalSvc: startsWith("private-") → pick baseDir
+    LocalSvc->>FS: fs.access(filePath, W_OK)
+    LocalSvc->>FS: fs.unlink(filePath)
+    alt file exists
+        FS-->>LocalSvc: deleted
+    else ENOENT
+        FS-->>LocalSvc: ENOENT (ignored)
+    end
+    LocalSvc-->>FileMod: void
+    FileMod-->>MedusaAPI: void
+    MedusaAPI-->>Client: 200 OK

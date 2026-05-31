@@ -1,0 +1,142 @@
+---
+title: Payment Module — Class Diagram
+---
+classDiagram
+    direction TB
+
+    class PaymentCollection {
+        +String id
+        +String currency_code
+        +BigNumber amount
+        +BigNumber authorized_amount
+        +BigNumber captured_amount
+        +BigNumber refunded_amount
+        +DateTime completed_at
+        +PaymentCollectionStatus status
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class PaymentSession {
+        +String id
+        +String payment_collection_id
+        +String provider_id
+        +PaymentSessionStatus status
+        +BigNumber amount
+        +String currency_code
+        +JSON data
+        +JSON context
+        +JSON metadata
+        +DateTime authorized_at
+        +DateTime created_at
+        +DateTime updated_at
+    }
+
+    class Payment {
+        +String id
+        +String payment_collection_id
+        +String payment_session_id
+        +String provider_id
+        +BigNumber amount
+        +String currency_code
+        +JSON data
+        +JSON metadata
+        +DateTime captured_at
+        +DateTime canceled_at
+        +DateTime created_at
+        +DateTime updated_at
+    }
+
+    class Capture {
+        +String id
+        +String payment_id
+        +BigNumber amount
+        +String created_by
+        +JSON metadata
+        +DateTime created_at
+    }
+
+    class Refund {
+        +String id
+        +String payment_id
+        +String refund_reason_id
+        +BigNumber amount
+        +String note
+        +String created_by
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+    }
+
+    class RefundReason {
+        +String id
+        +String value
+        +String label
+        +String description
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class PaymentProvider {
+        +String id
+        +Boolean is_enabled
+    }
+
+    class AccountHolder {
+        +String id
+        +String customer_id
+        +String provider_id
+        +JSON data
+        +JSON metadata
+        +DateTime created_at
+        +DateTime updated_at
+        +DateTime deleted_at
+    }
+
+    class IPaymentProvider {
+        <<interface>>
+        +initiatePayment(data) Promise
+        +authorizePayment(data) Promise
+        +capturePayment(data) Promise
+        +refundPayment(data) Promise
+        +cancelPayment(data) Promise
+        +retrievePayment(data) Promise
+        +deletePayment(data) Promise
+        +getWebhookActionAndData(data) Promise
+    }
+
+    class PaymentModuleService {
+        +createPaymentCollections()
+        +updatePaymentCollections()
+        +createPaymentSession()
+        +authorizePaymentSession()
+        +capturePayment()
+        +refundPayment()
+        +cancelPayment()
+        +processEvent()
+        +createAccountHolder()
+        +listPaymentProviders()
+    }
+
+    class PaymentProviderService {
+        +authorizePayment(session) Promise
+        +capturePayment(payment) Promise
+        +refundPayment(payment) Promise
+        +cancelPayment(payment) Promise
+        +initiatePayment(data) Promise
+        +getWebhookActionAndData(data) Promise
+    }
+
+    PaymentCollection "1" --> "*" PaymentSession : payment_sessions
+    PaymentCollection "1" --> "*" Payment : payments
+    PaymentCollection "*" --> "*" PaymentProvider : payment_providers
+    Payment "1" --> "*" Capture : captures
+    Payment "1" --> "*" Refund : refunds
+    Payment --> PaymentSession : payment_session
+    Refund --> RefundReason : reason
+    PaymentModuleService --> PaymentProviderService : delegates
+    PaymentProviderService --> IPaymentProvider : dispatches to

@@ -1,0 +1,97 @@
+classDiagram
+    direction TB
+
+    class IWorkflowEngineService {
+        <<interface>>
+        +run(workflowId: string, options: WorkflowRunOptions) Promise~WorkflowResult~
+        +getRunningTransaction(workflowId: string, transactionId: string, options?: TransactionOptions) Promise~DistributedTransaction~
+        +setStepSuccess(options: SetStepSuccessOptions) Promise~WorkflowResult~
+        +setStepFailure(options: SetStepFailureOptions) Promise~WorkflowResult~
+        +subscribe(options: WorkflowSubscribeOptions) void
+        +unsubscribe(options: WorkflowUnsubscribeOptions) void
+    }
+
+    class WorkflowEngineRedisService {
+        -redis: Redis
+        -orchestrator: DistributedTransactionOrchestrator
+        -worker: WorkflowWorker
+        -options: WorkflowEngineRedisOptions
+        +run(workflowId: string, options: WorkflowRunOptions) Promise~WorkflowResult~
+        +getRunningTransaction(workflowId: string, transactionId: string, options?) Promise~DistributedTransaction~
+        +setStepSuccess(options: SetStepSuccessOptions) Promise~WorkflowResult~
+        +setStepFailure(options: SetStepFailureOptions) Promise~WorkflowResult~
+        +subscribe(options: WorkflowSubscribeOptions) void
+        +unsubscribe(options: WorkflowUnsubscribeOptions) void
+        -persistTransactionState(tx: DistributedTransaction) Promise~void~
+        -loadTransactionState(transactionId: string) Promise~DistributedTransactionState~
+    }
+
+    class WorkflowWorker {
+        -redis: Redis
+        -service: WorkflowEngineRedisService
+        -running: boolean
+        +start() void
+        +stop() void
+        -poll() Promise~void~
+        -executeStep(task: WorkflowTask) Promise~void~
+        -acquireLock(lockKey: string) Promise~boolean~
+        -releaseLock(lockKey: string) Promise~void~
+    }
+
+    class RetryPolicy {
+        +maxRetries: number
+        +retryInterval: number
+        +shouldRetry(attempt: number) boolean
+        +getDelay(attempt: number) number
+    }
+
+    class DistributedLock {
+        -redis: Redis
+        +acquire(key: string, ttl: number) Promise~boolean~
+        +release(key: string) Promise~void~
+    }
+
+    class WorkflowTask {
+        <<interface>>
+        +transactionId: string
+        +workflowId: string
+        +stepId: string
+        +attempt: number
+    }
+
+    class WorkflowEngineRedisOptions {
+        <<interface>>
+        +redis: RedisConfig
+    }
+
+    class RedisConfig {
+        <<interface>>
+        +url: string
+        +options?: RedisOptions
+    }
+
+    class DistributedTransactionOrchestrator {
+        <<workflows-sdk>>
+        +beginTransaction(workflowId: string, handler: TransactionHandlerType, payload?: unknown) Promise~DistributedTransaction~
+        +resume(transaction: DistributedTransaction) Promise~void~
+        +compensate(transaction: DistributedTransaction) Promise~void~
+    }
+
+    class DistributedTransaction {
+        <<workflows-sdk>>
+        +transactionId: string
+        +workflowId: string
+        +status: TransactionStatus
+        +steps: Map~string, StepState~
+        +hasFinished() boolean
+    }
+
+    IWorkflowEngineService <|.. WorkflowEngineRedisService : implements
+    WorkflowEngineRedisService *-- WorkflowWorker : manages
+    WorkflowEngineRedisService *-- DistributedTransactionOrchestrator : delegates to
+    WorkflowEngineRedisService ..> WorkflowEngineRedisOptions : configured by
+    WorkflowWorker *-- DistributedLock : uses
+    WorkflowWorker *-- RetryPolicy : applies
+    WorkflowWorker ..> WorkflowTask : consumes
+    WorkflowEngineRedisOptions *-- RedisConfig : contains
+    WorkflowEngineRedisService ..> DistributedTransaction : persists / loads
